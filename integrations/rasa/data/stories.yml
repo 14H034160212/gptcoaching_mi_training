@@ -1,0 +1,8 @@
+version: "3.1"
+stories:
+- story: greet + coach
+  steps:
+  - intent: greet
+  - action: utter_greet
+  - intent: discuss_barrier
+  - action: action_llm_coach

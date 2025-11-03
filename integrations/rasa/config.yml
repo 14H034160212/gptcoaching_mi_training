@@ -1,0 +1,13 @@
+recipe: default.v1
+language: en
+pipeline:
+  - name: WhitespaceTokenizer
+  - name: RegexFeaturizer
+  - name: LexicalSyntacticFeaturizer
+  - name: CountVectorsFeaturizer
+  - name: DIETClassifier
+  - name: FallbackClassifier
+policies:
+  - name: RulePolicy
+  - name: MemoizationPolicy
+  - name: TEDPolicy

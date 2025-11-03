@@ -1,0 +1,26 @@
+version: "3.1"
+intents:
+  - report_progress
+  - set_goal
+  - discuss_barrier
+  - ask_advice
+  - reflect_feelings
+  - greet
+  - goodbye
+
+slots:
+  goal:
+    type: text
+    influence_conversation: true
+  barriers:
+    type: list
+    influence_conversation: true
+
+responses:
+  utter_greet:
+    - text: "Hi, I'm your activity coach. What would you like to focus on today?"
+  utter_goodbye:
+    - text: "Thanks for sharing. Let's check in again soon."
+
+actions:
+  - action_llm_coach

@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>GPTCoach MI Demo</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; background:#f7f7f9; margin:0; }
+    .wrap { max-width: 900px; margin: 24px auto; background: #fff; border-radius: 16px; padding: 16px 20px; box-shadow: 0 10px 25px rgba(0,0,0,.06); }
+    h1 { font-size: 20px; margin: 8px 0 16px; }
+    #log { height: 420px; overflow-y: auto; border:1px solid #eee; border-radius: 12px; padding:12px; }
+    .msg { margin: 10px 0; }
+    .user { color:#1a73e8; }
+    .coach { color:#0b8043; }
+    .row { display:flex; gap:8px; margin-top:12px; }
+    input, button { font-size:16px; padding:10px 12px; border-radius:10px; border:1px solid #ddd; }
+    input { flex:1; }
+    button { cursor:pointer; background:#1a73e8; color:#fff; border:none; }
+    .meta { font-size:12px; color:#999; margin-top:8px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>GPTCoach (Motivational Interviewing)</h1>
+    <div id="log"></div>
+<div id="scores" class="meta"></div>
+    <div class="row">
+      <input id="inp" placeholder="Say something..." />
+      <button id="send">Send</button>
+    </div>
+    <div class="meta">Backend: POST <code>/chat</code> (FastAPI). Set <code>MODEL_PATH</code> before launching the server.</div>
+  </div>
+<script>
+const log = document.getElementById('log');
+const inp = document.getElementById('inp');
+const send = document.getElementById('send');
+let history = []; // {user, coach}
+
+function append(role, text) {
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+  div.textContent = (role === 'user' ? 'You: ' : 'Coach: ') + text;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+async function callChat(msg) {
+  const res = await fetch('/chat', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({history, user_msg: msg})
+  });
+  const j = await res.json();
+  return j.reply || '(no reply)';
+}
+
+async function callScore() {
+  const res = await fetch('/score', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({history, user_msg: ''})
+  });
+  const j = await res.json();
+  const s = document.getElementById('scores');
+  if (!j.labels || !j.probs) { s.textContent = 'Classifier not loaded.'; return; }
+  let rows = j.labels.map((lab,i)=> `${lab}: ${(j.probs[i]*100).toFixed(1)}%`).join(' | ');
+  s.textContent = 'MI scores: ' + rows;
+}
+
+send.onclick = async () => {
+  const msg = inp.value.trim();
+  if (!msg) return;
+  append('user', msg);
+  inp.value=''; send.disabled=true;
+  try {
+    const reply = await callChat(msg);
+    append('coach', reply);
+    try { await callScore(); } catch(e) {}
+    history.push({user: msg, coach: reply});
+  } catch (e) {
+    append('coach', 'Error: ' + e);
+  } finally {
+    send.disabled=false; inp.focus();
+  }
+};
+inp.addEventListener('keydown', e => { if (e.key === 'Enter') send.onclick(); });
+</script>
+</body>
+</html>

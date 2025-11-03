@@ -1,0 +1,16 @@
+transformers>=4.42.0
+datasets>=2.20.0
+accelerate>=0.33.0
+trl>=0.9.6
+peft>=0.11.1
+bitsandbytes>=0.43.1
+torch
+
+fastapi>=0.112.0
+uvicorn>=0.30.0
+
+rasa==3.6.20
+rasa-sdk==3.6.2
+requests>=2.32.0
+
+datasets>=2.20.0

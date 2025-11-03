@@ -1,0 +1,25 @@
+{
+  "dialog_id": "string",
+  "turn_id": 0,
+  "user_utt": "string",
+  "coach_utt": "string",
+  "mi_tags": [
+    "open_question",
+    "reflection_simple",
+    "affirm",
+    "summary",
+    "provide_info",
+    "ask_permission",
+    "evoke_change_talk"
+  ],
+  "state_before": {
+    "goal": "increase_steps",
+    "barriers": [
+      "time"
+    ],
+    "week_steps_p50": 5400
+  },
+  "state_after": {
+    "plan": "walk 15min Tue/Thu"
+  }
+}

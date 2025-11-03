@@ -1,0 +1,51 @@
+{
+  "open_question": [
+    "Open Question",
+    "OpenQuestion",
+    "OQ",
+    "question_open",
+    "open_q"
+  ],
+  "closed_question": [
+    "Closed Question",
+    "CQ",
+    "question_closed",
+    "closed_q"
+  ],
+  "reflection_simple": [
+    "Simple Reflection",
+    "SR",
+    "reflection_simple",
+    "reflect_simple"
+  ],
+  "reflection_complex": [
+    "Complex Reflection",
+    "CR",
+    "reflection_complex",
+    "reflect_complex",
+    "Double-Sided Reflection"
+  ],
+  "affirm": [
+    "Affirm",
+    "AF",
+    "affirmation",
+    "Praise"
+  ],
+  "summary": [
+    "Summary",
+    "SU",
+    "summarize",
+    "sum_up"
+  ],
+  "provide_info": [
+    "Giving Information",
+    "GI",
+    "provide_information",
+    "info"
+  ],
+  "ask_permission": [
+    "Ask Permission",
+    "AP",
+    "permission"
+  ]
+}

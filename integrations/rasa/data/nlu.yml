@@ -1,0 +1,33 @@
+version: "3.1"
+nlu:
+- intent: greet
+  examples: |
+    - hi
+    - hello
+    - hey
+- intent: goodbye
+  examples: |
+    - bye
+    - goodbye
+- intent: report_progress
+  examples: |
+    - I walked more this week
+    - I missed my walks
+    - I couldn't exercise
+- intent: set_goal
+  examples: |
+    - I want to set a goal
+    - let's plan something
+- intent: discuss_barrier
+  examples: |
+    - I'm too busy
+    - I feel tired
+    - I don't have time
+- intent: ask_advice
+  examples: |
+    - what should I do
+    - any suggestions
+- intent: reflect_feelings
+  examples: |
+    - I feel stuck
+    - I'm not motivated

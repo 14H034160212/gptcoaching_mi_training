@@ -1,0 +1,7 @@
+training:
+  model_name_or_path: runs/sft-llama3-mi
+  output_dir: runs/dpo-llama3-mi
+  per_device_train_batch_size: 2
+  num_train_epochs: 1
+  lora: true
+  bnb_4bit: true
