@@ -14,3 +14,13 @@ rasa-sdk==3.6.2
 requests>=2.32.0
 
 datasets>=2.20.0
+wandb
+sentencepiece
+tokenizers
+
+black 
+isort 
+flake8 
+mypy 
+pylint 
+bandit

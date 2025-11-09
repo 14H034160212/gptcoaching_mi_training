@@ -2,87 +2,109 @@
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>GPTCoach MI Demo</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>GPTCoach (Motivational Interviewing)</title>
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; background:#f7f7f9; margin:0; }
-    .wrap { max-width: 900px; margin: 24px auto; background: #fff; border-radius: 16px; padding: 16px 20px; box-shadow: 0 10px 25px rgba(0,0,0,.06); }
-    h1 { font-size: 20px; margin: 8px 0 16px; }
-    #log { height: 420px; overflow-y: auto; border:1px solid #eee; border-radius: 12px; padding:12px; }
-    .msg { margin: 10px 0; }
-    .user { color:#1a73e8; }
-    .coach { color:#0b8043; }
-    .row { display:flex; gap:8px; margin-top:12px; }
-    input, button { font-size:16px; padding:10px 12px; border-radius:10px; border:1px solid #ddd; }
-    input { flex:1; }
-    button { cursor:pointer; background:#1a73e8; color:#fff; border:none; }
-    .meta { font-size:12px; color:#999; margin-top:8px; }
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+           background:#f6f7fb; margin:0; padding:24px; color:#1a1a1a;}
+    .card { max-width:900px; margin:0 auto; background:#fff; border-radius:16px; padding:18px 18px 8px;
+            box-shadow:0 8px 24px rgba(0,0,0,.06);}
+    h1 { margin: 0 0 14px; }
+    #log { height:480px; overflow:auto; border:1px solid #eee; border-radius:12px; padding:14px; background:#fafafa; white-space:pre-wrap;}
+    .u { color:#246bff; margin:6px 0;}
+    .c { color:#168153; margin:6px 0;}
+    .meta { color:#777; font-size:12px; margin:8px 2px;}
+    .row { display:flex; gap:10px; align-items:center; margin-top:12px;}
+    input[type=text] { flex:1; font-size:18px; padding:14px; border-radius:12px; border:2px solid #ddd; outline:0;}
+    button { padding:12px 18px; font-size:16px; border:0; background:#1f6feb; color:#fff; border-radius:12px; cursor:pointer;}
+    button:disabled { opacity:.6; cursor:not-allowed;}
   </style>
 </head>
 <body>
-  <div class="wrap">
+  <div class="card">
     <h1>GPTCoach (Motivational Interviewing)</h1>
     <div id="log"></div>
-<div id="scores" class="meta"></div>
+    <div id="scores" class="meta" style="display:none;"></div>
     <div class="row">
-      <input id="inp" placeholder="Say something..." />
+      <input id="inp" type="text" placeholder="Say something..." />
       <button id="send">Send</button>
     </div>
-    <div class="meta">Backend: POST <code>/chat</code> (FastAPI). Set <code>MODEL_PATH</code> before launching the server.</div>
+    <div class="meta">Backend: POST <code>/api/chat</code> (FastAPI). Open <code>/api/health</code> to check model path.</div>
   </div>
+
 <script>
-const log = document.getElementById('log');
-const inp = document.getElementById('inp');
-const send = document.getElementById('send');
-let history = []; // {user, coach}
+  const log = document.getElementById('log');
+  const scores = document.getElementById('scores');
+  const inp = document.getElementById('inp');
+  const send = document.getElementById('send');
 
-function append(role, text) {
-  const div = document.createElement('div');
-  div.className = 'msg ' + role;
-  div.textContent = (role === 'user' ? 'You: ' : 'Coach: ') + text;
-  log.appendChild(div);
-  log.scrollTop = log.scrollHeight;
-}
+  let history = []; // [{user, coach}...]
 
-async function callChat(msg) {
-  const res = await fetch('/chat', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({history, user_msg: msg})
-  });
-  const j = await res.json();
-  return j.reply || '(no reply)';
-}
-
-async function callScore() {
-  const res = await fetch('/score', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({history, user_msg: ''})
-  });
-  const j = await res.json();
-  const s = document.getElementById('scores');
-  if (!j.labels || !j.probs) { s.textContent = 'Classifier not loaded.'; return; }
-  let rows = j.labels.map((lab,i)=> `${lab}: ${(j.probs[i]*100).toFixed(1)}%`).join(' | ');
-  s.textContent = 'MI scores: ' + rows;
-}
-
-send.onclick = async () => {
-  const msg = inp.value.trim();
-  if (!msg) return;
-  append('user', msg);
-  inp.value=''; send.disabled=true;
-  try {
-    const reply = await callChat(msg);
-    append('coach', reply);
-    try { await callScore(); } catch(e) {}
-    history.push({user: msg, coach: reply});
-  } catch (e) {
-    append('coach', 'Error: ' + e);
-  } finally {
-    send.disabled=false; inp.focus();
+  function append(role, text) {
+    const div = document.createElement('div');
+    div.className = role === 'user' ? 'u' : 'c';
+    div.textContent = (role === 'user' ? 'You: ' : 'Coach: ') + text;
+    log.appendChild(div);
+    log.scrollTop = log.scrollHeight;
   }
-};
-inp.addEventListener('keydown', e => { if (e.key === 'Enter') send.onclick(); });
+
+  async function callChat(msg) {
+    const res = await fetch('/api/chat', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ history, user_msg: msg })
+    });
+    if (!res.ok) {
+      const t = await res.text();
+      throw new Error('HTTP ' + res.status + ': ' + t);
+    }
+    const j = await res.json();
+    return j.reply || '(no reply)';
+  }
+
+  async function callScore() {
+    try {
+      const res = await fetch('/api/score', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ history, user_msg: '' })
+      });
+      if (!res.ok) { scores.style.display='none'; return; }
+      const j = await res.json();
+      if (!j.labels || !j.probs || j.labels.length === 0) { scores.style.display='none'; return; }
+      const rows = j.labels.map((lab,i)=> `${lab}: ${(j.probs[i]*100).toFixed(1)}%`).join(' | ');
+      scores.textContent = 'MI scores: ' + rows;
+      scores.style.display='block';
+    } catch(_) { scores.style.display='none'; }
+  }
+
+  async function sendOnce() {
+    const msg = inp.value.trim();
+    if (!msg) return;
+    inp.value = '';
+    append('user', msg);
+    send.disabled = true;
+    try {
+      const reply = await callChat(msg);
+      history.push({ user: msg, coach: reply });
+      append('coach', reply);
+      await callScore();
+    } catch (e) {
+      append('coach', '(backend error: ' + e.message + ')');
+    } finally {
+      send.disabled = false;
+      inp.focus();
+    }
+  }
+
+  send.onclick = sendOnce;
+  // Enter key to send (Shift+Enter for newline)
+  inp.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendOnce();
+    }
+  });
 </script>
 </body>
 </html>

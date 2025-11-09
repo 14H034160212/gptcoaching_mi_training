@@ -42,14 +42,30 @@ def from_annomi(path: str):
     with open(path, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            if row.get("role","").lower() in ("therapist","coach","counselor"):
-                tags = [t.strip() for t in (row.get("tags","") or "").split("|") if t.strip()]
+            role = (row.get("interlocutor", "") or "").lower()
+            utt = norm_text(row.get("utterance_text", ""))
+            tags = [t.strip() for t in (row.get("main_therapist_behaviour", "") or "").split("|") if t.strip()]
+
+            # Therapist = coach turn
+            if role in ("therapist", "coach", "counselor"):
                 yield {
-                    "dialog_id": row.get("dialog_id",""),
-                    "turn_id": int(row.get("turn_id","0")),
+                    "dialog_id": row.get("transcript_id", ""),
+                    "turn_id": int(row.get("utterance_", "0")),
                     "user_utt": "",
-                    "coach_utt": norm_text(row.get("utterance","")),
+                    "coach_utt": utt,
                     "mi_tags": tags or ["unknown"],
+                    "state_before": {},
+                    "state_after": {}
+                }
+
+            # Client = user turn (optional, if you want to preserve)
+            elif role == "client":
+                yield {
+                    "dialog_id": row.get("transcript_id", ""),
+                    "turn_id": int(row.get("utterance_", "0")),
+                    "user_utt": utt,
+                    "coach_utt": "",
+                    "mi_tags": ["client"],
                     "state_before": {},
                     "state_after": {}
                 }
