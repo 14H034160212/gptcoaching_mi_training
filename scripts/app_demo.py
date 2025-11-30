@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-app_demo.py — FastAPI demo for MI-style chat with short-term memory + per-user logging.
+app_demo.py — FastAPI demo for MI-style chat with short-term memory + per-user logging + cognitive maps.
 
 Run:
   export MODEL_PATH=/abs/path/to/your/merged-model  # or HF repo id (public or private)
@@ -15,14 +15,16 @@ API:
   POST /api/score  {user_id, history?, user_msg?} ->  {labels, probs}
   POST /api/reset  {user_id} -> {ok: true}
   GET  /api/health -> model + device info
+  GET  /api/map/{user_id}?max_turns=20 -> cognitive map JSON
 
 Static:
   "/" serves web/index.html
 """
 import os, json, re, torch
-from typing import List, Dict
+from typing import List, Dict, Optional
 from datetime import datetime, timezone
 from collections import defaultdict
+from pathlib import Path
 
 from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
@@ -114,8 +116,22 @@ def append_jsonl(user_id: str, payload: dict):
     with open(fp, "a", encoding="utf-8") as f:
         f.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
-def build_messages(history: List[Turn], user_msg: str):
-    msgs = [{"role": "system", "content": SYSTEM}]
+
+def build_messages(history: List[Turn], user_msg: str, map_summary: Optional[str] = None):
+    """
+    Build chat messages; if map_summary is provided, inject it into the system prompt
+    as a kind of 'Graph-of-Thoughts' memory.
+    """
+    sys_content = SYSTEM
+    if map_summary:
+        sys_content += (
+            "\n\nHere is a brief summary of the user's situation based on previous dialogue "
+            "(goals, values, barriers, actions):\n"
+            f"{map_summary}\n"
+            "Use this context to ask better MI-style questions, but do not repeat this summary verbatim."
+        )
+
+    msgs = [{"role": "system", "content": sys_content}]
     for t in history:
         if t.user:
             msgs.append({"role": "user", "content": t.user})
@@ -124,11 +140,166 @@ def build_messages(history: List[Turn], user_msg: str):
     msgs.append({"role": "user", "content": user_msg})
     return msgs
 
-def render_prompt(history: List[Turn], user_msg: str) -> str:
-    msgs = build_messages(history, user_msg)
+
+def render_prompt(history: List[Turn], user_msg: str, map_summary: Optional[str] = None) -> str:
+    msgs = build_messages(history, user_msg, map_summary=map_summary)
     return tok.apply_chat_template(
         msgs, tokenize=False, add_generation_prompt=True  # start a new assistant turn
     )
+
+# ===== CogMap Extraction Helpers =====
+
+def load_dialog_for_user(user_id: str, max_turns: int = 20):
+    """Load last N turns from logs/<user_id>.jsonl"""
+    path = Path(LOG_DIR) / f"{user_id}.jsonl"
+    if not path.exists():
+        return []
+    turns = []
+    with path.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if rec.get("user") is None and rec.get("coach") is None:
+                continue
+            turns.append(rec)
+    return turns[-max_turns:]
+
+
+def turns_to_plaintext(turns):
+    lines = []
+    for t in turns:
+        if t.get("user"):
+            lines.append(f"USER: {t['user']}")
+        if t.get("coach"):
+            lines.append(f"COACH: {t['coach']}")
+    return "\n".join(lines)
+
+
+COGMAP_SYSTEM = """
+You are an expert motivational interviewing coach and knowledge-mapping assistant.
+
+Your job:
+- Read the conversation between USER and COACH.
+- Extract a cognitive map that summarizes the USER's goals, values, strengths, barriers, beliefs, actions, and outcomes.
+
+Return JSON ONLY with the structure:
+
+{
+  "nodes": [
+    {"id": "n1", "type": "goal|value|strength|barrier|belief|action|outcome", "label": "...", "evidence": "..."}
+  ],
+  "edges": [
+    {"source": "n1", "target": "n2", "type": "supports|blocks|explains|leads_to|part_of"}
+  ]
+}
+""".strip()
+
+
+def build_cogmap_prompt(dialogue_text: str):
+    msgs = [
+        {"role": "system", "content": COGMAP_SYSTEM},
+        {
+            "role": "user",
+            "content": (
+                "Here is the conversation:\n\n"
+                f"{dialogue_text}\n\n"
+                "Extract the cognitive map JSON."
+            ),
+        },
+    ]
+    return tok.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
+
+
+def extract_json_block(text: str):
+    start = text.find("{")
+    end = text.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        raise ValueError("No JSON found in model output.")
+    return text[start : end + 1]
+
+
+def generate_cogmap_from_turns(turns, max_new_tokens=512):
+    """Use the tuned Qwen model to extract cognitive maps from dialogue."""
+    dialogue = turns_to_plaintext(turns)
+    prompt = build_cogmap_prompt(dialogue)
+    inputs = tok(prompt, return_tensors="pt").to(model.device)
+
+    eos_id = tok.eos_token_id
+    try:
+        im_end = tok.convert_tokens_to_ids("<|im_end|>")
+    except Exception:
+        im_end = None
+    stop_ids = [i for i in (eos_id, im_end) if i is not None]
+
+    with torch.no_grad():
+        out = model.generate(
+            **inputs,
+            max_new_tokens=max_new_tokens,
+            do_sample=False,
+            temperature=0.0,
+            top_p=1.0,
+            pad_token_id=eos_id,
+            eos_token_id=stop_ids[0] if stop_ids else eos_id,
+        )
+
+    gen_ids = out[0][inputs["input_ids"].shape[-1]:]
+    text = tok.decode(gen_ids, skip_special_tokens=True).strip()
+
+    try:
+        js = extract_json_block(text)
+        data = json.loads(js)
+    except Exception:
+        cleaned = re.sub(r"<\|im_(start|end)\|>", " ", text)
+        cleaned = cleaned.strip()
+        js = extract_json_block(cleaned)
+        data = json.loads(js)
+
+    return data
+
+
+def summarize_cogmap_for_prompt(cmap: dict, max_items: int = 4) -> str:
+    """
+    Turn the cognitive map JSON into a short text summary
+    that can be injected into the system prompt (Graph-of-Thoughts style).
+    """
+    buckets: Dict[str, List[str]] = {
+        "goal": [],
+        "value": [],
+        "strength": [],
+        "barrier": [],
+        "belief": [],
+        "action": [],
+        "outcome": [],
+    }
+    for n in cmap.get("nodes", []):
+        t = (n.get("type") or "").lower()
+        label = (n.get("label") or "").strip()
+        if t in buckets and label:
+            if len(buckets[t]) < max_items:
+                buckets[t].append(label)
+
+    lines = []
+    if buckets["goal"]:
+        lines.append("Goals: " + "; ".join(buckets["goal"]))
+    if buckets["value"]:
+        lines.append("Values/Why it matters: " + "; ".join(buckets["value"]))
+    if buckets["barrier"]:
+        lines.append("Barriers: " + "; ".join(buckets["barrier"]))
+    if buckets["strength"]:
+        lines.append("Strengths/Resources: " + "; ".join(buckets["strength"]))
+    if buckets["belief"]:
+        lines.append("Key beliefs: " + "; ".join(buckets["belief"]))
+    if buckets["action"]:
+        lines.append("Actions/Strategies mentioned: " + "; ".join(buckets["action"]))
+    if buckets["outcome"]:
+        lines.append("Outcomes/Feedback: " + "; ".join(buckets["outcome"]))
+
+    return "\n".join(lines)
 
 # ===== Endpoints =====
 @api.get("/health")
@@ -149,12 +320,24 @@ def chat_endpoint(req: ChatRequest):
             for t in req.history:
                 mem.append({"user": t.user, "coach": t.coach})
 
-        # 2) Prompt with last N turns
+        # 2) Optional: build a cognitive map summary (Graph-of-Thoughts memory)
+        map_summary: Optional[str] = None
+        try:
+            # Only start building maps after a few turns to avoid overkill
+            if len(mem) >= 3:
+                turns_for_map = load_dialog_for_user(req.user_id, max_turns=12)
+                if turns_for_map:
+                    cmap = generate_cogmap_from_turns(turns_for_map, max_new_tokens=400)
+                    map_summary = summarize_cogmap_for_prompt(cmap)
+        except Exception as e:
+            print(f"[warn] cogmap summary failed: {e}")
+
+        # 3) Prompt with last N turns + optional map summary
         recent_hist = [Turn(user=h["user"], coach=h["coach"]) for h in mem][-6:]
-        prompt = render_prompt(recent_hist, req.user_msg)
+        prompt = render_prompt(recent_hist, req.user_msg, map_summary=map_summary)
         inputs = tok(prompt, return_tensors="pt").to(model.device)
 
-        # 3) Generate (decode only new tokens)
+        # 4) Generate (decode only new tokens)
         eos_id = tok.eos_token_id
         im_end_id = None
         try:
@@ -180,10 +363,10 @@ def chat_endpoint(req: ChatRequest):
             raw = tok.decode(gen_ids, skip_special_tokens=False)
             reply = re.sub(r"<\|im_(start|end)\|>|\s+", " ", raw).strip()
 
-        # 4) Update server memory
+        # 5) Update server memory
         mem.append({"user": req.user_msg, "coach": reply})
 
-        # 5) Persist one turn
+        # 6) Persist one turn
         record = {
             "ts": datetime.now(timezone.utc).isoformat(),
             "user_id": req.user_id,
@@ -221,7 +404,23 @@ def score_endpoint(req: ChatRequest):
 @api.post("/reset")
 def reset_endpoint(req: ResetReq):
     SESSIONS.pop(req.user_id, None)
+    # also clear log file if you want (optional)
     return {"ok": True}
+
+@api.get("/map/{user_id}")
+def get_cognitive_map(user_id: str, max_turns: int = 20):
+    """
+    Generate a cognitive map JSON from the user's dialogue history.
+    Frontend can render this with Cytoscape.
+    """
+    try:
+        turns = load_dialog_for_user(user_id, max_turns=max_turns)
+        if not turns:
+            return {"error": f"No dialog found for user_id={user_id}"}
+        data = generate_cogmap_from_turns(turns)
+        return data
+    except Exception as e:
+        return {"error": str(e)}
 
 # Provide a null favicon to silence 404s
 @app.get("/favicon.ico")

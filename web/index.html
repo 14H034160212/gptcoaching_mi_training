@@ -1,152 +1,347 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>GPTCoach (Motivational Interviewing)</title>
+  <meta charset="UTF-8" />
+  <title>GPTCoach MI Demo + Cognitive Map</title>
   <style>
-    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-           background:#f6f7fb; margin:0; padding:24px; color:#1a1a1a;}
-    .card { max-width:900px; margin:0 auto; background:#fff; border-radius:16px; padding:18px 18px 8px;
-            box-shadow:0 8px 24px rgba(0,0,0,.06);}
-    h1 { margin: 0 0 14px; }
-    #log { height:520px; overflow:auto; border:1px solid #eee; border-radius:12px; padding:14px; background:#fafafa; white-space:pre-wrap;}
-    .u { color:#246bff; margin:6px 0;}
-    .c { color:#168153; margin:6px 0;}
-    .meta { color:#777; font-size:12px; margin:8px 2px;}
-    .row { display:flex; gap:10px; align-items:center; margin-top:12px;}
-    input[type=text] { flex:1; font-size:18px; padding:14px; border-radius:12px; border:2px solid #ddd; outline:0;}
-    button { padding:12px 18px; font-size:16px; border:0; background:#1f6feb; color:#fff; border-radius:12px; cursor:pointer;}
-    button:disabled { opacity:.6; cursor:not-allowed;}
-    .right { display:flex; gap:10px; align-items:center; }
-    .pill { font-size:12px; background:#eef3ff; border:1px solid #d7e2ff; color:#2856d6; padding:4px 8px; border-radius:999px;}
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+    #left, #right {
+      padding: 12px;
+      box-sizing: border-box;
+    }
+    #left {
+      width: 50%;
+      border-right: 1px solid #ddd;
+      display: flex;
+      flex-direction: column;
+    }
+    #right {
+      width: 50%;
+      display: flex;
+      flex-direction: column;
+    }
+    #chat-log {
+      flex: 1;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 8px;
+      margin-bottom: 8px;
+      overflow-y: auto;
+      background: #fafafa;
+      font-size: 14px;
+      white-space: pre-wrap;
+    }
+    .msg-user {
+      color: #1a73e8;
+      margin-bottom: 4px;
+    }
+    .msg-coach {
+      color: #0b8043;
+      margin-bottom: 8px;
+    }
+    #controls {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 8px;
+      align-items: center;
+    }
+    #controls input[type="text"] {
+      padding: 4px 6px;
+      font-size: 14px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+    }
+    #input-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    #user-input {
+      flex: 1;
+      padding: 6px 8px;
+      font-size: 14px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+    }
+    button {
+      padding: 6px 10px;
+      font-size: 13px;
+      border-radius: 4px;
+      border: 1px solid #999;
+      background: #f5f5f5;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #e8e8e8;
+    }
+    #cy {
+      flex: 1;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      margin-top: 8px;
+    }
+    #map-controls {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 4px;
+      align-items: center;
+    }
+    #status {
+      font-size: 12px;
+      color: #666;
+      margin-top: 4px;
+    }
   </style>
 </head>
 <body>
-  <div class="card">
-    <div style="display:flex; justify-content:space-between; align-items:center;">
-      <h1>GPTCoach (Motivational Interviewing)</h1>
-      <div class="right">
-        <span id="uid" class="pill"></span>
-        <button id="reset" title="Clear this user's server memory">Reset</button>
-      </div>
+  <div id="left">
+    <div id="controls">
+      <label for="user-id">User ID:</label>
+      <input id="user-id" type="text" value="demo_user" />
+      <button id="reset-btn">Reset Session</button>
     </div>
-
-    <div id="log"></div>
-    <div id="scores" class="meta" style="display:none;"></div>
-
-    <div class="row">
-      <input id="inp" type="text" placeholder="Say something..." />
-      <button id="send">Send</button>
+    <div id="chat-log"></div>
+    <div id="input-row">
+      <input id="user-input" type="text" placeholder="Type your message..." />
+      <button id="send-btn">Send</button>
     </div>
-
-    <div class="meta">
-      Backend: POST <code>/api/chat</code> (FastAPI). Open <code>/api/health</code> to check model path.<br/>
-      Logs: <code>runs/chat_logs/&lt;user_id&gt;.jsonl</code>
-    </div>
+    <div id="status"></div>
   </div>
 
-<script>
-  // Persist a per-user identifier
-  let USER_ID = localStorage.getItem('user_id');
-  if (!USER_ID) {
-    USER_ID = (crypto.randomUUID ? crypto.randomUUID() : 'anon-' + Math.random().toString(36).slice(2));
-    localStorage.setItem('user_id', USER_ID);
-  }
-  document.getElementById('uid').textContent = 'user: ' + USER_ID.slice(0,8);
+  <div id="right">
+    <div id="map-controls">
+      <span><strong>Cognitive Map</strong></span>
+      <button id="refresh-map-btn">Refresh Map</button>
+      <button id="download-png-btn">Download PNG</button>
+      <button id="download-svg-btn">Download SVG</button>
+    </div>
+    <div id="cy"></div>
+  </div>
 
-  const log = document.getElementById('log');
-  const scores = document.getElementById('scores');
-  const inp = document.getElementById('inp');
-  const send = document.getElementById('send');
-  const resetBtn = document.getElementById('reset');
+  <!-- Cytoscape + SVG extension -->
+  <script src="https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
+  <script src="https://unpkg.com/cytoscape-svg@2.1.2/cytoscape-svg.min.js"></script>
+  <script>
+    // register svg extension
+    if (typeof cytoscapeSvg !== "undefined") {
+      cytoscape.use(cytoscapeSvg);
+    }
 
-  let history = []; // client-side convenience copy
+    const apiBase = "/api";
+    const chatLog = document.getElementById("chat-log");
+    const userInput = document.getElementById("user-input");
+    const userIdInput = document.getElementById("user-id");
+    const sendBtn = document.getElementById("send-btn");
+    const resetBtn = document.getElementById("reset-btn");
+    const statusEl = document.getElementById("status");
 
-  function append(role, text) {
-    const div = document.createElement('div');
-    div.className = role === 'user' ? 'u' : 'c';
-    div.textContent = (role === 'user' ? 'You: ' : 'Coach: ') + text;
-    log.appendChild(div);
-    log.scrollTop = log.scrollHeight;
-  }
+    const refreshMapBtn = document.getElementById("refresh-map-btn");
+    const downloadPngBtn = document.getElementById("download-png-btn");
+    const downloadSvgBtn = document.getElementById("download-svg-btn");
 
-  async function callChat(msg) {
-    const res = await fetch('/api/chat', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ user_id: USER_ID, history, user_msg: msg })
+    let cy = null;
+    let lastMapData = null;
+
+    function appendMsg(role, text) {
+      const div = document.createElement("div");
+      div.className = role === "user" ? "msg-user" : "msg-coach";
+      div.textContent = (role === "user" ? "User: " : "Coach: ") + text;
+      chatLog.appendChild(div);
+      chatLog.scrollTop = chatLog.scrollHeight;
+    }
+
+    async function sendMessage() {
+      const msg = userInput.value.trim();
+      if (!msg) return;
+      const userId = userIdInput.value.trim() || "anon";
+
+      appendMsg("user", msg);
+      userInput.value = "";
+      statusEl.textContent = "Sending...";
+
+      try {
+        const res = await fetch(`${apiBase}/chat`, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({
+            user_id: userId,
+            history: [],
+            user_msg: msg,
+          }),
+        });
+        const data = await res.json();
+        appendMsg("coach", data.reply || "");
+        statusEl.textContent = "Ready.";
+      } catch (err) {
+        console.error(err);
+        statusEl.textContent = "Error sending message.";
+      }
+    }
+
+    async function resetSession() {
+      const userId = userIdInput.value.trim() || "anon";
+      chatLog.innerHTML = "";
+      statusEl.textContent = "Resetting...";
+      try {
+        await fetch(`${apiBase}/reset`, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({user_id: userId}),
+        });
+        statusEl.textContent = "Session reset.";
+      } catch (err) {
+        console.error(err);
+        statusEl.textContent = "Error resetting.";
+      }
+    }
+
+    async function refreshMap() {
+      const userId = userIdInput.value.trim() || "anon";
+      statusEl.textContent = "Loading cognitive map...";
+      try {
+        const res = await fetch(`${apiBase}/map/${encodeURIComponent(userId)}?max_turns=20`);
+        const data = await res.json();
+        if (data.error) {
+          statusEl.textContent = "No map: " + data.error;
+          return;
+        }
+        lastMapData = data;
+        renderMap(data);
+        statusEl.textContent = "Map updated.";
+      } catch (err) {
+        console.error(err);
+        statusEl.textContent = "Error loading map.";
+      }
+    }
+
+    function renderMap(data) {
+      const elements = [];
+
+      const typeColor = {
+        goal: "#1e88e5",
+        value: "#6a1b9a",
+        strength: "#43a047",
+        barrier: "#e53935",
+        belief: "#fb8c00",
+        action: "#00897b",
+        outcome: "#5e35b1",
+      };
+
+      (data.nodes || []).forEach(n => {
+        const t = (n.type || "").toLowerCase();
+        elements.push({
+          data: {
+            id: n.id,
+            label: n.label || n.id,
+            type: t,
+          }
+        });
+      });
+
+      (data.edges || []).forEach(e => {
+        elements.push({
+          data: {
+            id: `${e.source}->${e.target}:${e.type}`,
+            source: e.source,
+            target: e.target,
+            type: e.type,
+          }
+        });
+      });
+
+      if (cy) {
+        cy.destroy();
+      }
+
+      cy = cytoscape({
+        container: document.getElementById("cy"),
+        elements,
+        style: [
+          {
+            selector: "node",
+            style: {
+              "label": "data(label)",
+              "text-wrap": "wrap",
+              "text-max-width": "120px",
+              "font-size": 10,
+              "text-valign": "center",
+              "text-halign": "center",
+              "border-width": 1,
+              "border-color": "#555",
+              "width": "label",
+              "height": "label",
+              "padding": "8px",
+              "background-color": (ele) => {
+                const t = ele.data("type") || "";
+                return typeColor[t] || "#90a4ae";
+              },
+            }
+          },
+          {
+            selector: "edge",
+            style: {
+              "width": 1.5,
+              "line-color": "#999",
+              "target-arrow-color": "#999",
+              "target-arrow-shape": "triangle",
+              "curve-style": "bezier",
+              "label": "data(type)",
+              "font-size": 8,
+              "text-rotation": "autorotate",
+            }
+          }
+        ],
+        layout: {
+          name: "cose",
+          animate: false,
+          fit: true,
+        }
+      });
+    }
+
+    function downloadPng() {
+      if (!cy) return;
+      const png = cy.png({ full: true, scale: 2 });
+      const a = document.createElement("a");
+      a.href = png;
+      a.download = "cognitive_map.png";
+      a.click();
+    }
+
+    function downloadSvg() {
+      if (!cy || typeof cy.svg !== "function") {
+        alert("SVG export not available (svg extension not loaded).");
+        return;
+      }
+      const svgContent = cy.svg({ full: true });
+      const blob = new Blob([svgContent], { type: "image/svg+xml;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "cognitive_map.svg";
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    sendBtn.addEventListener("click", sendMessage);
+    userInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
     });
-    if (!res.ok) {
-      const t = await res.text();
-      throw new Error('HTTP ' + res.status + ': ' + t);
-    }
-    const j = await res.json();
-    return j.reply || '(no reply)';
-  }
+    resetBtn.addEventListener("click", resetSession);
+    refreshMapBtn.addEventListener("click", refreshMap);
+    downloadPngBtn.addEventListener("click", downloadPng);
+    downloadSvgBtn.addEventListener("click", downloadSvg);
 
-  async function callScore() {
-    try {
-      const res = await fetch('/api/score', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ user_id: USER_ID, history, user_msg: '' })
-      });
-      if (!res.ok) { scores.style.display='none'; return; }
-      const j = await res.json();
-      if (!j.labels || !j.probs || j.labels.length === 0) { scores.style.display='none'; return; }
-      const rows = j.labels.map((lab,i)=> `${lab}: ${(j.probs[i]*100).toFixed(1)}%`).join(' | ');
-      scores.textContent = 'MI scores: ' + rows;
-      scores.style.display='block';
-    } catch(_) { scores.style.display='none'; }
-  }
-
-  async function resetSession() {
-    try {
-      await fetch('/api/reset', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ user_id: USER_ID })
-      });
-      history = [];
-      log.innerHTML = '';
-      append('coach', '(memory cleared for this user)');
-      scores.style.display='none';
-      inp.focus();
-    } catch (e) {
-      append('coach', '(reset failed: ' + e.message + ')');
-    }
-  }
-
-  async function sendOnce() {
-    const msg = inp.value.trim();
-    if (!msg) return;
-    inp.value = '';
-    append('user', msg);
-    send.disabled = true;
-    try {
-      const reply = await callChat(msg);
-      history.push({ user: msg, coach: reply });
-      append('coach', reply);
-      await callScore();
-    } catch (e) {
-      append('coach', '(backend error: ' + e.message + ')');
-    } finally {
-      send.disabled = false;
-      inp.focus();
-    }
-  }
-
-  send.onclick = sendOnce;
-  resetBtn.onclick = resetSession;
-
-  // Enter to send (Shift+Enter for newline)
-  inp.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendOnce();
-    }
-  });
-</script>
+    statusEl.textContent = "Ready.";
+  </script>
 </body>
 </html>
