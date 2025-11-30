@@ -39,6 +39,12 @@ from transformers import (
     AutoModelForSequenceClassification,
 )
 
+from typing import List, Dict
+from pydantic import BaseModel
+
+from scripts.cogmap_utils import build_cognitive_map_from_session
+
+
 SYSTEM = (
     "You are a supportive health coach using Motivational Interviewing (MI). "
     "Be non-judgmental; use open questions, reflective listening, and affirmations; "
@@ -108,6 +114,10 @@ class ChatRequest(BaseModel):
 
 class ResetReq(BaseModel):
     user_id: str
+
+class CogMapReq(BaseModel):
+    user_id: str = "anon"
+
 
 # ===== Helpers =====
 def append_jsonl(user_id: str, payload: dict):
@@ -385,6 +395,39 @@ def chat_endpoint(req: ChatRequest):
         print(f"[error] chat generation failed: {e}")
         return {"reply": f"(backend error: {e})"}
 
+@api.post("/cogmap")
+def cogmap_endpoint(req: CogMapReq):
+    """
+    Build / refresh the cognitive map for a given user_id based on the
+    server-side session memory (SESSIONS[user_id]).
+    """
+    session = SESSIONS.get(req.user_id, [])
+    # we only use user utterances + coach replies; structure already matches
+    cm = build_cognitive_map_from_session(session)
+
+    # Optional: you can also persist this map per user for history / profiling
+    try:
+        cm_rec = dict(cm)
+        cm_rec["user_id"] = req.user_id
+        cm_rec["turns"] = len(session)
+        from datetime import datetime, timezone
+        ts = datetime.now(timezone.utc).isoformat()
+        cm_rec["ts"] = ts
+
+        import os, json
+        from pathlib import Path
+
+        log_dir = os.environ.get("LOG_DIR", "runs/chat_logs")
+        maps_dir = os.path.join(log_dir, "cogmaps")
+        Path(maps_dir).mkdir(parents=True, exist_ok=True)
+        fp = os.path.join(maps_dir, f"{req.user_id}.jsonl")
+        with open(fp, "a", encoding="utf-8") as f:
+            f.write(json.dumps(cm_rec, ensure_ascii=False) + "\n")
+    except Exception as e:
+        print(f"[warn] failed to persist cognitive map: {e}")
+
+    return cm
+
 @api.post("/score")
 def score_endpoint(req: ChatRequest):
     if not (cls_model and cls_tok):
@@ -411,14 +454,61 @@ def reset_endpoint(req: ResetReq):
 def get_cognitive_map(user_id: str, max_turns: int = 20):
     """
     Generate a cognitive map JSON from the user's dialogue history.
-    Frontend can render this with Cytoscape.
+    If the LLM returns no edges, auto-generate simple reasonable edges
+    so the map is not empty and the UI will show connections.
     """
     try:
         turns = load_dialog_for_user(user_id, max_turns=max_turns)
         if not turns:
             return {"error": f"No dialog found for user_id={user_id}"}
+
         data = generate_cogmap_from_turns(turns)
+        nodes = data.get("nodes", []) or []
+        edges = data.get("edges", []) or []
+
+        # -------------------------------------------
+        # Minimal heuristic: auto-add edges if missing
+        # -------------------------------------------
+        if not edges and len(nodes) >= 2:
+            # First: try to find a goal to link everything to
+            goal_nodes = [n for n in nodes if (n.get("type") or "").lower() == "goal"]
+
+            if goal_nodes:
+                goal_id = goal_nodes[0]["id"]
+                for n in nodes:
+                    nid = n["id"]
+                    if nid == goal_id:
+                        continue
+
+                    ntype = (n.get("type") or "").lower()
+                    rel = "supports"
+                    if ntype == "barrier":
+                        rel = "blocks"
+                    elif ntype in ("belief", "strength"):
+                        rel = "explains"
+                    elif ntype == "action":
+                        rel = "leads_to"
+
+                    edges.append({
+                        "source": nid,
+                        "target": goal_id,
+                        "type": rel
+                    })
+            else:
+                # Fallback: connect all nodes to first node
+                root = nodes[0]["id"]
+                for n in nodes[1:]:
+                    edges.append({
+                        "source": root,
+                        "target": n["id"],
+                        "type": "related"
+                    })
+
+        # Update and return final map
+        data["nodes"] = nodes
+        data["edges"] = edges
         return data
+
     except Exception as e:
         return {"error": str(e)}
 

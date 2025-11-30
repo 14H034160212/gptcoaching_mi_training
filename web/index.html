@@ -51,12 +51,6 @@
       margin-bottom: 8px;
       align-items: center;
     }
-    #controls input[type="text"] {
-      padding: 4px 6px;
-      font-size: 14px;
-      border-radius: 4px;
-      border: 1px solid #ccc;
-    }
     #input-row {
       display: flex;
       gap: 8px;
@@ -80,74 +74,107 @@
     button:hover {
       background: #e8e8e8;
     }
+
+    /* -------------------- Cognitive Map 区域 -------------------- */
+    #map-controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    /* Summary Box */
+    #summary-box {
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      padding: 8px;
+      background: #fafafa;
+      max-height: 160px;
+      overflow-y: auto;
+      margin-bottom: 8px;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
     #cy {
       flex: 1;
       border: 1px solid #ddd;
       border-radius: 8px;
-      margin-top: 8px;
     }
-    #map-controls {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 4px;
-      align-items: center;
-    }
-    #status {
+
+    #status, #mapStatus {
       font-size: 12px;
       color: #666;
       margin-top: 4px;
     }
   </style>
 </head>
+
 <body>
+  <!-- ---------------- Left: Chat Panel ---------------- -->
   <div id="left">
     <div id="controls">
       <label for="user-id">User ID:</label>
       <input id="user-id" type="text" value="demo_user" />
       <button id="reset-btn">Reset Session</button>
     </div>
+
     <div id="chat-log"></div>
+
     <div id="input-row">
       <input id="user-input" type="text" placeholder="Type your message..." />
       <button id="send-btn">Send</button>
     </div>
+
     <div id="status"></div>
   </div>
 
+  <!-- ---------------- Right: Cognitive Map Panel ---------------- -->
   <div id="right">
     <div id="map-controls">
-      <span><strong>Cognitive Map</strong></span>
+      <strong>Cognitive Map</strong>
       <button id="refresh-map-btn">Refresh Map</button>
       <button id="download-png-btn">Download PNG</button>
       <button id="download-svg-btn">Download SVG</button>
     </div>
+
+    <div id="summary-box">
+      <strong>Map Summary:</strong>
+      <div id="mapSummary"></div>
+    </div>
+
     <div id="cy"></div>
+
+    <div id="mapStatus"></div>
   </div>
 
-  <!-- Cytoscape + SVG extension -->
+  <!-- Cytoscape + SVG -->
   <script src="https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
   <script src="https://unpkg.com/cytoscape-svg@2.1.2/cytoscape-svg.min.js"></script>
+
   <script>
-    // register svg extension
     if (typeof cytoscapeSvg !== "undefined") {
       cytoscape.use(cytoscapeSvg);
     }
 
     const apiBase = "/api";
-    const chatLog = document.getElementById("chat-log");
+
     const userInput = document.getElementById("user-input");
     const userIdInput = document.getElementById("user-id");
+    const chatLog = document.getElementById("chat-log");
+    const statusEl = document.getElementById("status");
+    const mapStatusEl = document.getElementById("mapStatus");
+    const mapSummaryEl = document.getElementById("mapSummary");
+
     const sendBtn = document.getElementById("send-btn");
     const resetBtn = document.getElementById("reset-btn");
-    const statusEl = document.getElementById("status");
-
     const refreshMapBtn = document.getElementById("refresh-map-btn");
     const downloadPngBtn = document.getElementById("download-png-btn");
     const downloadSvgBtn = document.getElementById("download-svg-btn");
 
     let cy = null;
-    let lastMapData = null;
 
+    // ---------------- Chat logic ----------------
     function appendMsg(role, text) {
       const div = document.createElement("div");
       div.className = role === "user" ? "msg-user" : "msg-coach";
@@ -159,8 +186,8 @@
     async function sendMessage() {
       const msg = userInput.value.trim();
       if (!msg) return;
-      const userId = userIdInput.value.trim() || "anon";
 
+      const userId = userIdInput.value.trim() || "anon";
       appendMsg("user", msg);
       userInput.value = "";
       statusEl.textContent = "Sending...";
@@ -168,13 +195,10 @@
       try {
         const res = await fetch(`${apiBase}/chat`, {
           method: "POST",
-          headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({
-            user_id: userId,
-            history: [],
-            user_msg: msg,
-          }),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: userId, history: [], user_msg: msg }),
         });
+
         const data = await res.json();
         appendMsg("coach", data.reply || "");
         statusEl.textContent = "Ready.";
@@ -188,35 +212,40 @@
       const userId = userIdInput.value.trim() || "anon";
       chatLog.innerHTML = "";
       statusEl.textContent = "Resetting...";
-      try {
-        await fetch(`${apiBase}/reset`, {
-          method: "POST",
-          headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({user_id: userId}),
-        });
-        statusEl.textContent = "Session reset.";
-      } catch (err) {
-        console.error(err);
-        statusEl.textContent = "Error resetting.";
-      }
+      await fetch(`${apiBase}/reset`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId }),
+      });
+      statusEl.textContent = "Session reset.";
     }
 
-    async function refreshMap() {
+    // ---------------- Map logic ----------------
+    async function refreshCogMap() {
       const userId = userIdInput.value.trim() || "anon";
-      statusEl.textContent = "Loading cognitive map...";
+      mapStatusEl.innerText = "Loading cognitive map...";
+
       try {
-        const res = await fetch(`${apiBase}/map/${encodeURIComponent(userId)}?max_turns=20`);
-        const data = await res.json();
+        const resp = await fetch(`${apiBase}/cogmap`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: userId }),
+        });
+
+        const data = await resp.json();
+
         if (data.error) {
-          statusEl.textContent = "No map: " + data.error;
+          mapStatusEl.innerText = "No map: " + data.error;
+          mapSummaryEl.innerText = "";
           return;
         }
-        lastMapData = data;
+
         renderMap(data);
-        statusEl.textContent = "Map updated.";
+        mapSummaryEl.innerText = data.summary || "";
+        mapStatusEl.innerText = "Map updated.";
       } catch (err) {
         console.error(err);
-        statusEl.textContent = "Error loading map.";
+        mapStatusEl.innerText = "Error loading map.";
       }
     }
 
@@ -234,12 +263,11 @@
       };
 
       (data.nodes || []).forEach(n => {
-        const t = (n.type || "").toLowerCase();
         elements.push({
           data: {
             id: n.id,
-            label: n.label || n.id,
-            type: t,
+            label: n.label,
+            type: (n.type || "").toLowerCase(),
           }
         });
       });
@@ -247,7 +275,7 @@
       (data.edges || []).forEach(e => {
         elements.push({
           data: {
-            id: `${e.source}->${e.target}:${e.type}`,
+            id: `${e.source}-${e.target}-${e.type}`,
             source: e.source,
             target: e.target,
             type: e.type,
@@ -255,9 +283,7 @@
         });
       });
 
-      if (cy) {
-        cy.destroy();
-      }
+      if (cy) cy.destroy();
 
       cy = cytoscape({
         container: document.getElementById("cy"),
@@ -266,7 +292,7 @@
           {
             selector: "node",
             style: {
-              "label": "data(label)",
+              label: "data(label)",
               "text-wrap": "wrap",
               "text-max-width": "120px",
               "font-size": 10,
@@ -274,37 +300,30 @@
               "text-halign": "center",
               "border-width": 1,
               "border-color": "#555",
-              "width": "label",
-              "height": "label",
-              "padding": "8px",
-              "background-color": (ele) => {
-                const t = ele.data("type") || "";
-                return typeColor[t] || "#90a4ae";
-              },
-            }
+              padding: "8px",
+              "background-color": ele =>
+                typeColor[ele.data("type")] || "#90a4ae",
+            },
           },
           {
             selector: "edge",
             style: {
-              "width": 1.5,
+              width: 1.5,
               "line-color": "#999",
               "target-arrow-color": "#999",
               "target-arrow-shape": "triangle",
               "curve-style": "bezier",
-              "label": "data(type)",
+              label: "data(type)",
               "font-size": 8,
               "text-rotation": "autorotate",
-            }
+            },
           }
         ],
-        layout: {
-          name: "cose",
-          animate: false,
-          fit: true,
-        }
+        layout: { name: "cose", animate: false, fit: true }
       });
     }
 
+    // ---------------- Downloads ----------------
     function downloadPng() {
       if (!cy) return;
       const png = cy.png({ full: true, scale: 2 });
@@ -316,7 +335,7 @@
 
     function downloadSvg() {
       if (!cy || typeof cy.svg !== "function") {
-        alert("SVG export not available (svg extension not loaded).");
+        alert("SVG export not available.");
         return;
       }
       const svgContent = cy.svg({ full: true });
@@ -329,17 +348,15 @@
       URL.revokeObjectURL(url);
     }
 
-    sendBtn.addEventListener("click", sendMessage);
-    userInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        sendMessage();
-      }
+    sendBtn.onclick = sendMessage;
+    resetBtn.onclick = resetSession;
+    refreshMapBtn.onclick = refreshCogMap;
+    downloadPngBtn.onclick = downloadPng;
+    downloadSvgBtn.onclick = downloadSvg;
+
+    userInput.addEventListener("keydown", e => {
+      if (e.key === "Enter") sendMessage();
     });
-    resetBtn.addEventListener("click", resetSession);
-    refreshMapBtn.addEventListener("click", refreshMap);
-    downloadPngBtn.addEventListener("click", downloadPng);
-    downloadSvgBtn.addEventListener("click", downloadSvg);
 
     statusEl.textContent = "Ready.";
   </script>
