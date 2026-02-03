@@ -1,0 +1,32 @@
+[boot] MODEL_PATH=/mnt/gptcoaching_mi_training/runs/qwen2p5-3b-mi-dpo
+[boot] Detected PEFT adapter. Loading base model first.
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]Loading checkpoint shards:  50%|█████     | 1/2 [00:10<00:10, 10.77s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:20<00:00, 10.07s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:20<00:00, 10.17s/it]
+INFO:     Started server process [446141]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)
+INFO:     127.0.0.1:33914 - "POST /api/reset HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33924 - "GET /api/journey/demo_vip_user HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33940 - "POST /api/journey/advance HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33956 - "POST /api/journey/validate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33964 - "POST /api/journey/advance HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33972 - "GET /api/journey/demo_vip_user HTTP/1.1" 200 OK
+[chat] reply= Certainly! Let's embark on this journey together to create a Cognitive Wiring Map that will guide your path to optimal performance. To begin, could you please share with me your story? What significan
+[kerrio] stage=history_collection
+INFO:     127.0.0.1:33988 - "POST /api/chat HTTP/1.1" 200 OK
+[chat] reply= Thank you for sharing that. It sounds like your childhood was marked by high expectations from your parents, which may have influenced your sense of self and your approach to perfectionism. In the HIS
+[kerrio] stage=history_collection
+INFO:     127.0.0.1:44988 - "POST /api/chat HTTP/1.1" 200 OK
+[chat] reply= That's a deeply rooted belief that has likely shaped your perspective on your worth and your productivity. In the Psychology & Philosophy pillar, we delve into the core beliefs and value systems that 
+[kerrio] stage=history_collection
+INFO:     127.0.0.1:50794 - "POST /api/chat HTTP/1.1" 200 OK
+The following generation flags are not valid and may be ignored: ['temperature', 'top_k']. Set `TRANSFORMERS_VERBOSITY=info` for more details.
+INFO:     Shutting down
+INFO:     Waiting for connections to close. (CTRL+C to force quit)
+INFO:     Waiting for background tasks to complete. (CTRL+C to force quit)
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [446141]
+[warn] cogmap summary failed: Expecting ',' delimiter: line 14 column 57 (char 1197)
+[chat] reply= Thank you for sharing those details about your sleep patterns and stress levels. These factors are crucial in understanding your overall well-being and can significantly impact your cognitive function
+[kerrio] stage=history_collection

@@ -57,6 +57,7 @@ class Edge:
 
 
 # --------- small vocab for heuristics ---------
+# Extended for Kerrio.AI requirements (Mayo Clinic diagnostic model)
 
 EMOTION_WORDS = {
     "tired": "Tiredness",
@@ -66,6 +67,12 @@ EMOTION_WORDS = {
     "sad": "Sadness",
     "down": "Low mood",
     "guilty": "Guilt",
+    "frustrated": "Frustration",
+    "overwhelmed": "Overwhelm",
+    "burned out": "Burnout",
+    "unfulfilled": "Unfulfillment",
+    "stuck": "Feeling stuck",
+    "lost": "Feeling lost",
 }
 
 HEALTH_WORDS = {"health", "healthy", "fitter", "fitness"}
@@ -77,6 +84,9 @@ BEHAVIOUR_PATTERNS = [
     (r"\bdrink(ing)?\b", "Drinking alcohol"),
     (r"\bsmok(ing|e)\b", "Smoking"),
     (r"\bscroll(ing)? (on )?(my |the )?phone\b", "Phone scrolling"),
+    (r"\boverwork(ing)?\b", "Overworking"),
+    (r"\bprocrastinat(e|ing)\b", "Procrastination"),
+    (r"\bavoid(ing)?\b", "Avoidance"),
 ]
 
 BARRIER_PHRASES = [
@@ -86,15 +96,66 @@ BARRIER_PHRASES = [
     "hard to",
     "difficult to",
     "can't seem to",
+    "don't know how",
+    "afraid to",
+    "scared to",
 ]
 
 GOAL_PATTERNS = [
     r"\bI want to ([^.,;]+)",
     r"\bI'd like to ([^.,;]+)",
     r"\bmy goal is to ([^.,;]+)",
+    r"\bI need to ([^.,;]+)",
+    r"\bI'm trying to ([^.,;]+)",
 ]
 
 SO_I_CAN_PATTERN = r"\bso I can ([^.,;]+)"
+
+# === Kerrio-specific: Core Assumptions & Beliefs ===
+CORE_ASSUMPTION_PATTERNS = [
+    (r"\bI(?:'m| am) (?:not |never )?(?:good enough|worthy|capable|smart enough)\b", "core_assumption"),
+    (r"\bI (?:always|never) ([^.,;]+)", "recurrent_pattern"),
+    (r"\bI(?:'ve| have) always been ([^.,;]+)", "core_assumption"),
+    (r"\bI should(?:n't)? ([^.,;]+)", "belief"),
+    (r"\bI must ([^.,;]+)", "belief"),
+    (r"\bpeople (?:always|never) ([^.,;]+)", "belief"),
+    (r"\bif I (?:don't|do) ([^.,;]+) then ([^.,;]+)", "core_assumption"),
+]
+
+# === Kerrio-specific: Recurrent Patterns ===
+RECURRENT_PATTERN_SIGNALS = [
+    "i always",
+    "every time",
+    "i keep",
+    "i tend to",
+    "this happens whenever",
+    "the same thing",
+    "pattern",
+    "cycle",
+    "i find myself",
+]
+
+# === Kerrio-specific: Hidden Constraints ===
+HIDDEN_CONSTRAINT_PATTERNS = [
+    (r"(?:without realizing|unconsciously|automatically)[^.]*", "hidden_constraint"),
+    (r"I don't know why I ([^.,;]+)", "hidden_constraint"),
+    (r"for some reason I ([^.,;]+)", "hidden_constraint"),
+]
+
+# === Kerrio-specific: Triggers ===
+TRIGGER_PATTERNS = [
+    (r"when(?:ever)? ([^,]+), I ([^.,;]+)", "trigger"),
+    (r"([^.,;]+) makes me ([^.,;]+)", "trigger"),
+    (r"([^.,;]+) triggers ([^.,;]+)", "trigger"),
+]
+
+# === Kerrio-specific: Strengths ===
+STRENGTH_PATTERNS = [
+    (r"I(?:'m| am) good at ([^.,;]+)", "strength"),
+    (r"my strength is ([^.,;]+)", "strength"),
+    (r"I excel at ([^.,;]+)", "strength"),
+    (r"people say I(?:'m| am) ([^.,;]+)", "strength"),
+]
 
 
 # --------- text helpers ---------
@@ -126,8 +187,8 @@ def extract_concepts_from_user_text(text: str) -> Dict[str, List[Dict[str, str]]
     """
     Heuristically extract concepts from a single user utterance.
 
-    Returns dict with keys: goals, emotions, behaviours, barriers, values, outcomes
-    where each item is {"label": "...", "type": "..."}.
+    Extended for Kerrio.AI to support Mayo Clinic diagnostic model.
+    Returns dict with keys for all Kerrio node types.
     """
     concepts: Dict[str, List[Dict[str, str]]] = {
         "goals": [],
@@ -136,6 +197,13 @@ def extract_concepts_from_user_text(text: str) -> Dict[str, List[Dict[str, str]]
         "barriers": [],
         "values": [],
         "outcomes": [],
+        # Kerrio-specific additions
+        "core_assumptions": [],
+        "recurrent_patterns": [],
+        "hidden_constraints": [],
+        "triggers": [],
+        "strengths": [],
+        "beliefs": [],
     }
 
     low = text.lower()
@@ -187,6 +255,59 @@ def extract_concepts_from_user_text(text: str) -> Dict[str, List[Dict[str, str]]
             {"label": clean_label(m.group(0).capitalize()), "type": "outcome"}
         )
 
+    # === Kerrio-specific extractions ===
+
+    # 7) Core assumptions and beliefs
+    for pat, node_type in CORE_ASSUMPTION_PATTERNS:
+        m = re.search(pat, text, flags=re.IGNORECASE)
+        if m:
+            label = clean_label(m.group(0))
+            if node_type == "core_assumption":
+                concepts["core_assumptions"].append({"label": label, "type": "core_assumption"})
+            elif node_type == "recurrent_pattern":
+                concepts["recurrent_patterns"].append({"label": label, "type": "recurrent_pattern"})
+            elif node_type == "belief":
+                concepts["beliefs"].append({"label": label, "type": "belief"})
+
+    # 8) Recurrent patterns
+    for signal in RECURRENT_PATTERN_SIGNALS:
+        if signal in low:
+            # Extract the sentence containing the signal
+            sentences = text.split(".")
+            for sent in sentences:
+                if signal in sent.lower():
+                    label = clean_label(sent.strip())
+                    if label and len(label) > 10:
+                        concepts["recurrent_patterns"].append({
+                            "label": f"Pattern: {label}",
+                            "type": "recurrent_pattern"
+                        })
+                    break
+            break
+
+    # 9) Hidden constraints
+    for pat, node_type in HIDDEN_CONSTRAINT_PATTERNS:
+        m = re.search(pat, text, flags=re.IGNORECASE)
+        if m:
+            label = clean_label(m.group(0))
+            concepts["hidden_constraints"].append({"label": label, "type": "hidden_constraint"})
+
+    # 10) Triggers
+    for pat, node_type in TRIGGER_PATTERNS:
+        m = re.search(pat, text, flags=re.IGNORECASE)
+        if m:
+            trigger_text = m.group(1) if m.lastindex >= 1 else m.group(0)
+            label = f"Trigger: {clean_label(trigger_text)}"
+            concepts["triggers"].append({"label": label, "type": "trigger"})
+
+    # 11) Strengths
+    for pat, node_type in STRENGTH_PATTERNS:
+        m = re.search(pat, text, flags=re.IGNORECASE)
+        if m:
+            strength_text = m.group(1) if m.lastindex >= 1 else m.group(0)
+            label = f"Strength: {clean_label(strength_text)}"
+            concepts["strengths"].append({"label": label, "type": "strength"})
+
     return concepts
 
 
@@ -197,6 +318,8 @@ def build_raw_nodes_edges(session: List[Dict[str, str]]) -> (List[Node], List[Ed
     """
     Build *uncollapsed* nodes and edges from a sequence of turns.
     Node ids are temporary; we'll reassign after clustering.
+
+    Extended for Kerrio.AI Mayo Clinic diagnostic model.
     """
     nodes: List[Node] = []
     edges: List[Edge] = []
@@ -213,6 +336,7 @@ def build_raw_nodes_edges(session: List[Dict[str, str]]) -> (List[Node], List[Ed
 
         conc = extract_concepts_from_user_text(user_txt)
 
+        # Original node types
         emo_nodes = [add_node(c["label"], c["type"], i) for c in conc["emotions"]]
         beh_nodes = [add_node(c["label"], c["type"], i) for c in conc["behaviours"]]
         goal_nodes = [add_node(c["label"], c["type"], i) for c in conc["goals"]]
@@ -220,7 +344,16 @@ def build_raw_nodes_edges(session: List[Dict[str, str]]) -> (List[Node], List[Ed
         value_nodes = [add_node(c["label"], c["type"], i) for c in conc["values"]]
         outcome_nodes = [add_node(c["label"], c["type"], i) for c in conc["outcomes"]]
 
-        # simple relational heuristics:
+        # Kerrio-specific node types
+        assumption_nodes = [add_node(c["label"], c["type"], i) for c in conc["core_assumptions"]]
+        pattern_nodes = [add_node(c["label"], c["type"], i) for c in conc["recurrent_patterns"]]
+        hidden_nodes = [add_node(c["label"], c["type"], i) for c in conc["hidden_constraints"]]
+        trigger_nodes = [add_node(c["label"], c["type"], i) for c in conc["triggers"]]
+        strength_nodes = [add_node(c["label"], c["type"], i) for c in conc["strengths"]]
+        belief_nodes = [add_node(c["label"], c["type"], i) for c in conc["beliefs"]]
+
+        # === Original relational heuristics ===
+
         # emotion -> behaviour (influences)
         for e in emo_nodes:
             for b in beh_nodes:
@@ -275,6 +408,78 @@ def build_raw_nodes_edges(session: List[Dict[str, str]]) -> (List[Node], List[Ed
                         type="supports_goal",
                         evidence_turns=[i],
                     )
+                )
+
+        # === Kerrio-specific relational heuristics ===
+
+        # core_assumption -> recurrent_pattern (causes)
+        for a in assumption_nodes:
+            for p in pattern_nodes:
+                edges.append(
+                    Edge(source=a.id, target=p.id, type="causes", evidence_turns=[i])
+                )
+
+        # core_assumption -> barrier (causes)
+        for a in assumption_nodes:
+            for br in barrier_nodes:
+                edges.append(
+                    Edge(source=a.id, target=br.id, type="causes", evidence_turns=[i])
+                )
+
+        # recurrent_pattern -> emotion (leads_to)
+        for p in pattern_nodes:
+            for e in emo_nodes:
+                edges.append(
+                    Edge(source=p.id, target=e.id, type="leads_to", evidence_turns=[i])
+                )
+
+        # recurrent_pattern -> barrier (maintains)
+        for p in pattern_nodes:
+            for br in barrier_nodes:
+                edges.append(
+                    Edge(source=p.id, target=br.id, type="maintains", evidence_turns=[i])
+                )
+
+        # hidden_constraint -> recurrent_pattern (causes)
+        for h in hidden_nodes:
+            for p in pattern_nodes:
+                edges.append(
+                    Edge(source=h.id, target=p.id, type="causes", evidence_turns=[i])
+                )
+
+        # trigger -> behaviour (triggers)
+        for t in trigger_nodes:
+            for b in beh_nodes:
+                edges.append(
+                    Edge(source=t.id, target=b.id, type="triggers", evidence_turns=[i])
+                )
+
+        # trigger -> emotion (triggers)
+        for t in trigger_nodes:
+            for e in emo_nodes:
+                edges.append(
+                    Edge(source=t.id, target=e.id, type="triggers", evidence_turns=[i])
+                )
+
+        # strength -> goal (supports_goal)
+        for s in strength_nodes:
+            for g in goal_nodes:
+                edges.append(
+                    Edge(source=s.id, target=g.id, type="supports_goal", evidence_turns=[i])
+                )
+
+        # belief -> behaviour (influences)
+        for bl in belief_nodes:
+            for b in beh_nodes:
+                edges.append(
+                    Edge(source=bl.id, target=b.id, type="influences", evidence_turns=[i])
+                )
+
+        # belief -> barrier (causes)
+        for bl in belief_nodes:
+            for br in barrier_nodes:
+                edges.append(
+                    Edge(source=bl.id, target=br.id, type="causes", evidence_turns=[i])
                 )
 
     return nodes, edges
@@ -336,29 +541,71 @@ def remap_and_merge_edges(edges: List[Edge], id_map: Dict[str, str]) -> List[Edg
 
 
 def build_summary(nodes: List[Node], edges: List[Edge]) -> str:
+    """
+    Build a structured diagnostic summary for Kerrio.AI.
+    Organized by Mayo Clinic diagnostic categories.
+    """
+    # Original categories
     goals = [n.label for n in nodes if n.type == "goal"]
     behaviours = [n.label for n in nodes if n.type == "behaviour"]
     barriers = [n.label for n in nodes if n.type == "barrier"]
     values = [n.label for n in nodes if n.type == "value"]
     outcomes = [n.label for n in nodes if n.type == "outcome"]
 
+    # Kerrio-specific categories
+    core_assumptions = [n.label for n in nodes if n.type == "core_assumption"]
+    recurrent_patterns = [n.label for n in nodes if n.type == "recurrent_pattern"]
+    hidden_constraints = [n.label for n in nodes if n.type == "hidden_constraint"]
+    triggers = [n.label for n in nodes if n.type == "trigger"]
+    strengths = [n.label for n in nodes if n.type == "strength"]
+    beliefs = [n.label for n in nodes if n.type == "belief"]
+    emotions = [n.label for n in nodes if n.type == "emotion"]
+
     parts: List[str] = []
 
+    # Structured Diagnostic Summary (per Kerrio User Journey PDF)
+    parts.append("=== STRUCTURED DIAGNOSTIC SUMMARY ===")
+
     if goals:
-        parts.append("Main goals: " + "; ".join(goals) + ".")
-    if behaviours:
-        parts.append("Possible strategies / behaviours: " + "; ".join(behaviours) + ".")
+        parts.append("\n[Goals]: " + "; ".join(goals))
+
+    if core_assumptions:
+        parts.append("\n[Core Assumptions]: " + "; ".join(core_assumptions))
+
+    if recurrent_patterns:
+        parts.append("\n[Recurrent Patterns]: " + "; ".join(recurrent_patterns))
+
+    if beliefs:
+        parts.append("\n[Beliefs]: " + "; ".join(beliefs))
+
     if barriers:
-        parts.append("Key barriers: " + "; ".join(barriers) + ".")
+        parts.append("\n[Barriers]: " + "; ".join(barriers))
+
+    if hidden_constraints:
+        parts.append("\n[Hidden Constraints]: " + "; ".join(hidden_constraints))
+
+    if triggers:
+        parts.append("\n[Triggers]: " + "; ".join(triggers))
+
+    if emotions:
+        parts.append("\n[Emotional Patterns]: " + "; ".join(sorted(set(emotions))))
+
+    if behaviours:
+        parts.append("\n[Behaviours]: " + "; ".join(behaviours))
+
+    if strengths:
+        parts.append("\n[Strengths/Resources]: " + "; ".join(strengths))
+
     if values:
-        parts.append("Underlying values: " + "; ".join(sorted(set(values))) + ".")
+        parts.append("\n[Underlying Values]: " + "; ".join(sorted(set(values))))
+
     if outcomes:
-        parts.append("Desired outcomes: " + "; ".join(outcomes) + ".")
+        parts.append("\n[Desired Outcomes]: " + "; ".join(outcomes))
 
-    if not parts:
-        return "Cognitive map extracted from the conversation (no strong goals or barriers detected yet)."
+    if len(parts) <= 1:
+        return "Cognitive Wiring Map in progress (continue gathering history across three pillars: History, Psychology/Philosophy, Physiology)."
 
-    return " ".join(parts)
+    return "".join(parts)
 
 
 def build_cognitive_map_from_session(session: List[Dict[str, str]]) -> Dict[str, Any]:

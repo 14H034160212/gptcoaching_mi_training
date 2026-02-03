@@ -146,6 +146,157 @@ uvicorn scripts.app_demo:app --host 0.0.0.0 --port 8000 --reload
 # }
 ```
 
+---
+
+## Kerrio.AI - Digital Cognitive Clinic
+
+Kerrio.AI implements a Mayo Clinic-inspired 7-stage clinical journey for cognitive optimization. This is NOT a chatbot - it's a diagnostic-first digital cognitive clinic.
+
+### Key Concepts (from Mayo Clinic Model)
+- **Accurate diagnosis is the foundation of effective treatment**
+- **Understanding is a prerequisite for permanent change**
+- **Client History and Clinician's Notes are maintained separately**
+
+### The 7-Stage Clinical Journey
+1. **Registration** - Client validated as invited guest
+2. **History Collection** - Three Pillars (History, Psychology/Philosophy, Physiology)
+3. **Consultation** - Clarify ambiguities, uncover blind spots
+4. **Diagnosis** - Build Cognitive Wiring Map, explain WHY the problem exists
+5. **Proposal** - Personalized treatment plan based on diagnosis
+6. **Treatment** - Cognitive Rewiring Maps (Patent Pending)
+7. **Monitoring** - Longitudinal progress assessment
+
+### Running Kerrio.AI Demo
+
+```bash
+# 1. Set environment variables
+export HF_HOME=/mnt/.cache/huggingface
+export TRANSFORMERS_CACHE=/mnt/.cache/huggingface/transformers
+export MODEL_PATH=/mnt/gptcoaching_mi_training/runs/qwen2p5-3b-mi-dpo-merged
+
+# 2. Start the server
+uvicorn scripts.app_demo:app --host 0.0.0.0 --port 8000 --reload
+
+# 3. Open browser
+# http://localhost:8000/
+```
+
+### Kerrio API Endpoints
+
+#### Core Chat
+- `POST /api/chat` - Send message and get AI response
+  ```json
+  {"user_id": "demo_user", "user_msg": "I feel stuck in my career"}
+  ```
+
+#### Journey Management
+- `GET /api/journey/{user_id}` - Get current journey status and stage
+- `POST /api/journey/advance` - Advance to next stage (if requirements met)
+- `GET /api/journey/prompts/{user_id}` - Get suggested prompts for current stage
+
+#### Three Pillars History
+- `GET /api/journey/history/{user_id}` - Get client's collected history across 3 pillars
+- `GET /api/journey/notes/{user_id}` - Get clinician's notes (AI observations)
+
+#### Diagnosis & Treatment
+- `GET /api/journey/diagnosis/{user_id}` - Generate/retrieve diagnosis
+- `POST /api/journey/diagnosis/confirm/{user_id}` - Confirm understanding of diagnosis
+- `GET /api/journey/treatment/{user_id}` - Get treatment proposal with Cognitive Rewiring Map
+- `POST /api/journey/treatment/accept/{user_id}` - Accept treatment plan
+- `POST /api/journey/treatment/progress/{user_id}` - Update treatment progress
+
+#### Educational Videos
+- `GET /api/journey/videos` - Get all educational video library
+- `GET /api/journey/videos/{video_id}` - Get specific video details
+
+#### Full Profile
+- `GET /api/journey/full-profile/{user_id}` - Complete client profile with all data
+
+#### Cognitive Map
+- `POST /api/cogmap` - Build cognitive map from session
+- `GET /api/map/{user_id}` - Get cognitive wiring map for user
+
+### Web Interface Features
+
+The web UI (`web/index.html`) includes:
+
+1. **Journey Progress Bar** - Shows current stage (Registration → Monitoring)
+2. **Chat Interface** - Conversational interaction with Kerrio
+3. **Three Pillars Panel** - View collected history across:
+   - History Pillar (life events, patterns)
+   - Psychology/Philosophy Pillar (beliefs, values)
+   - Physiology Pillar (sleep, stress, health)
+4. **Diagnosis Panel** - View:
+   - Core Constraints
+   - Bottlenecks
+   - Root Causes
+   - Explanation
+   - Recommended Educational Videos
+   - "I Understand My Diagnosis" confirmation button
+5. **Treatment Panel** - View:
+   - Current Wiring patterns
+   - Target Wiring (desired state)
+   - Rewiring Steps
+   - Progress bar
+   - "Accept Treatment Plan" button
+6. **Cognitive Map Visualization** - Interactive graph with Cytoscape.js
+
+### Testing the Kerrio Journey Module
+
+```bash
+# Run the kerrio_journey.py module directly for testing
+python scripts/kerrio_journey.py
+
+# This will:
+# - Create a test profile
+# - Show the stage-specific system prompt
+# - Test the Diagnostic Engine
+# - Display sample diagnosis output
+```
+
+### Key Files
+
+| File | Description |
+|------|-------------|
+| `scripts/kerrio_journey.py` | Core journey management, data structures, diagnostic & rewiring engines |
+| `scripts/app_demo.py` | FastAPI server with all endpoints |
+| `scripts/cogmap_utils.py` | Heuristic cognitive map builder |
+| `web/index.html` | Full-featured web interface |
+| `runs/kerrio_profiles/` | Persistent client profile storage (JSON) |
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        Web Interface                            │
+│  (Chat, Journey Bar, Three Pillars, Diagnosis, Treatment)       │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      FastAPI (app_demo.py)                       │
+│  - /api/chat, /api/journey/*, /api/cogmap, /api/map/*           │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+          ┌───────────────────┼───────────────────┐
+          ▼                   ▼                   ▼
+┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
+│ KerriJourney    │ │ DiagnosticEngine│ │ CognitiveRewiring│
+│ Manager         │ │                 │ │ Engine           │
+│ - 7 stages      │ │ - Root causes   │ │ - Rewiring maps  │
+│ - 3 pillars     │ │ - Bottlenecks   │ │ - Treatment steps│
+│ - Profile I/O   │ │ - Video recs    │ │                  │
+└─────────────────┘ └─────────────────┘ └─────────────────┘
+          │                   │                   │
+          └───────────────────┴───────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    LLM (Qwen/fine-tuned model)                   │
+│            Stage-specific system prompts                         │
+└─────────────────────────────────────────────────────────────────┘
+```
+
 
 <!-- ---
 ## Model-based MITI/MISC Scoring

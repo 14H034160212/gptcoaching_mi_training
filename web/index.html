@@ -1,158 +1,1083 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
-  <title>GPTCoach MI Demo + Cognitive Map</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kerrio.AI - Digital Cognitive Clinic</title>
   <style>
-    body {
-      margin: 0;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      display: flex;
-      height: 100vh;
-      overflow: hidden;
+    /* === Modern Design System === */
+    :root {
+      /* Palette */
+      --primary: #0ea5e9;
+      /* Sky 500 */
+      --primary-dark: #0284c7;
+      /* Sky 600 */
+      --secondary: #6366f1;
+      /* Indigo 500 */
+      --bg-app: #f8fafc;
+      /* Slate 50 */
+      --bg-panel: #ffffff;
+      --text-main: #0f172a;
+      /* Slate 900 */
+      --text-muted: #64748b;
+      /* Slate 500 */
+      --border: #e2e8f0;
+      /* Slate 200 */
+
+      /* Status */
+      --success: #22c55e;
+      --error: #ef4444;
+      --warning: #f59e0b;
+
+      /* Spacing & Radius */
+      --radius-sm: 6px;
+      --radius-md: 12px;
+      --radius-lg: 20px;
+      --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+      --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+
+      /* Header & Nav */
+      --header-height: 60px;
     }
-    #left, #right {
-      padding: 12px;
+
+    * {
       box-sizing: border-box;
     }
-    #left {
-      width: 50%;
-      border-right: 1px solid #ddd;
+
+    body {
+      margin: 0;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background-color: var(--bg-app);
+      color: var(--text-main);
+      height: 100vh;
       display: flex;
       flex-direction: column;
+      overflow: hidden;
     }
-    #right {
-      width: 50%;
+
+    /* === Header === */
+    header {
+      height: var(--header-height);
+      background: var(--bg-panel);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 1.5rem;
+      flex-shrink: 0;
+      justify-content: space-between;
+      box-shadow: var(--shadow-sm);
+      z-index: 10;
+    }
+
+    .brand {
+      font-weight: 800;
+      font-size: 1.5rem;
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.5px;
+    }
+
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .nav-btn {
+      padding: 6px 12px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: white;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .nav-btn:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    /* === Journey Stepper === */
+    .journey-track {
+      background: white;
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid var(--border);
+      overflow-x: auto;
+      flex-shrink: 0;
+    }
+
+    .step {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 16px;
+      border-radius: 50px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      background: #f1f5f9;
+      white-space: nowrap;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      border: 1px solid transparent;
+    }
+
+    /* Mapping to legacy JS class */
+    .journey-stage {}
+
+    .journey-stage.active {
+      background: var(--primary);
+      color: white;
+      box-shadow: 0 4px 12px rgba(14, 165, 233, 0.25);
+      transform: translateY(-1px);
+    }
+
+    .journey-stage.completed {
+      background: #ecfdf5;
+      color: var(--success);
+      border-color: #bbf7d0;
+      padding-left: 12px;
+    }
+
+    .journey-stage.completed::before {
+      content: "✓";
+      font-weight: bold;
+    }
+
+    /* === Main Grid Layout === */
+    #app-container {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 400px 1fr;
+      /* Fixed chat width, flex content */
+      gap: 20px;
+      padding: 20px;
+      overflow: hidden;
+      max-width: 1800px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    @media (min-width: 1600px) {
+      #app-container {
+        grid-template-columns: 450px 1fr;
+      }
+    }
+
+    /* Column Styles */
+    .col-left,
+    .col-right {
       display: flex;
       flex-direction: column;
+      gap: 16px;
+      height: 100%;
+      min-width: 0;
+      overflow: hidden;
     }
+
+    /* Card Component */
+    .card {
+      background: var(--bg-panel);
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Chat Styling */
+    .chat-container {
+      flex: 1;
+      height: 100%;
+    }
+
     #chat-log {
       flex: 1;
-      border: 1px solid #ddd;
-      border-radius: 8px;
-      padding: 8px;
-      margin-bottom: 8px;
       overflow-y: auto;
-      background: #fafafa;
-      font-size: 14px;
-      white-space: pre-wrap;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      background: #f8fafc;
     }
-    .msg-user {
-      color: #1a73e8;
-      margin-bottom: 4px;
-    }
+
+    .msg-user,
     .msg-coach {
-      color: #0b8043;
-      margin-bottom: 8px;
+      max-width: 85%;
+      padding: 12px 16px;
+      font-size: 0.95rem;
+      line-height: 1.5;
+      position: relative;
+      animation: fadeIn 0.3s ease;
     }
-    #controls {
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .msg-user {
+      align-self: flex-end;
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      color: white;
+      border-radius: 18px 18px 4px 18px;
+      box-shadow: 0 2px 8px rgba(14, 165, 233, 0.2);
+    }
+
+    .msg-coach {
+      align-self: flex-start;
+      background: white;
+      color: var(--text-main);
+      border: 1px solid var(--border);
+      border-radius: 18px 18px 18px 4px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .msg-coach::before {
+      content: "Kerrio Assistant";
+      display: block;
+      font-size: 0.7rem;
+      color: var(--secondary);
+      font-weight: 700;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* Input Area */
+    .input-area {
+      padding: 16px;
+      border-top: 1px solid var(--border);
+      background: white;
       display: flex;
-      gap: 8px;
-      margin-bottom: 8px;
-      align-items: center;
+      gap: 10px;
     }
-    #input-row {
-      display: flex;
-      gap: 8px;
-      margin-top: 4px;
-    }
+
     #user-input {
       flex: 1;
-      padding: 6px 8px;
-      font-size: 14px;
-      border-radius: 4px;
-      border: 1px solid #ccc;
-    }
-    button {
-      padding: 6px 10px;
-      font-size: 13px;
-      border-radius: 4px;
-      border: 1px solid #999;
-      background: #f5f5f5;
-      cursor: pointer;
-    }
-    button:hover {
-      background: #e8e8e8;
+      padding: 12px 16px;
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      outline: none;
+      font-size: 0.95rem;
+      transition: all 0.2s;
+      background: #f8fafc;
     }
 
-    /* -------------------- Cognitive Map 区域 -------------------- */
-    #map-controls {
+    #user-input:focus {
+      background: white;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
+    }
+
+    .btn-send {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      background: var(--primary);
+      color: white;
+      border: none;
       display: flex;
-      gap: 8px;
       align-items: center;
-      margin-bottom: 8px;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 1.2rem;
+      transition: all 0.2s;
     }
 
-    /* Summary Box */
-    #summary-box {
-      border: 1px solid #ccc;
-      border-radius: 6px;
-      padding: 8px;
-      background: #fafafa;
-      min-height: 80px;
-      max-height: 40vh;
-      overflow-y: auto;
-      margin-bottom: 8px;
-      font-size: 13px;
-      line-height: 1.4;
+    .btn-send:hover {
+      background: var(--primary-dark);
+      transform: scale(1.05);
+    }
+
+    .btn-send:active {
+      transform: scale(0.95);
+    }
+
+    /* Right Column: Map & Panels */
+    .map-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #fcfcfc;
     }
 
     #cy {
-      flex: 1;
-      border: 1px solid #ddd;
-      border-radius: 8px;
+      background: #ffffff;
+      height: 100%;
     }
 
-    #status, #mapStatus {
-      font-size: 12px;
-      color: #666;
-      margin-top: 4px;
+    /* Panels Tab Navigation */
+    .tabs-header {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      padding: 0 16px;
+      gap: 20px;
+      background: white;
+    }
+
+    .panel-tab {
+      padding: 16px 4px;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--text-muted);
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .panel-tab:hover {
+      color: var(--primary);
+    }
+
+    .panel-tab.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+    }
+
+    .panel-content {
+      padding: 24px;
+      overflow-y: auto;
+      flex: 1;
+      background: #fdfdfd;
+    }
+
+    /* Panel Sections */
+    .panel-section {
+      display: none;
+    }
+
+    .panel-section.visible {
+      display: block;
+      animation: fadeIn 0.3s ease;
+    }
+
+    /* Content Styling within Panels */
+    h4 {
+      margin: 0 0 16px 0;
+      color: var(--text-main);
+      font-size: 1.1rem;
+    }
+
+    h5 {
+      margin: 16px 0 8px 0;
+      color: var(--primary-dark);
+      font-size: 0.9rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .pillar,
+    .diagnosis-section,
+    .rewiring-step {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 16px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+    }
+
+    .pillar h5,
+    .diagnosis-section h5 {
+      margin-top: 0;
+    }
+
+    .confirm-btn {
+      width: 100%;
+      padding: 12px;
+      margin-top: 16px;
+      background: var(--success);
+      color: white;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-weight: 600;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .confirm-btn:hover {
+      filter: brightness(110%);
+    }
+
+    .confirm-btn:disabled {
+      background: #cbd5e1;
+      cursor: not-allowed;
+      filter: none;
+    }
+
+    #advance-btn {
+      background: var(--secondary);
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: background 0.2s;
+      box-shadow: 0 2px 4px rgba(99, 102, 241, 0.3);
+    }
+
+    #advance-btn:disabled {
+      background: #cbd5e1;
+      box-shadow: none;
+      cursor: not-allowed;
+    }
+
+    #advance-btn:hover:not(:disabled) {
+      background: #4f46e5;
+    }
+
+    /* Tags & Badges */
+    .metric-row {
+      margin-bottom: 12px;
+    }
+
+    .metric-row label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 500;
+      margin-bottom: 6px;
+      color: var(--text-muted);
+    }
+
+    .metric-row select,
+    .metric-row input,
+    .metric-row textarea {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-family: inherit;
+      font-size: 0.9rem;
+    }
+
+    /* Expanded Map State */
+    .map-card-expanded {
+      position: fixed !important;
+      top: 0;
+      left: 0;
+      width: 100vw !important;
+      height: 100vh !important;
+      z-index: 10000;
+      border-radius: 0;
+      flex: none !important;
+    }
+
+    /* Mobile Responsiveness */
+    @media (max-width: 900px) {
+      #app-container {
+        grid-template-columns: 1fr;
+        padding: 10px;
+        gap: 16px;
+        overflow-y: auto;
+        display: block;
+      }
+
+      body {
+        height: auto;
+        overflow: auto;
+      }
+
+      .col-left {
+        height: 600px;
+        margin-bottom: 16px;
+      }
+
+      .col-right {
+        height: auto;
+      }
+
+      header {
+        padding: 0 16px;
+      }
+
+      .journey-track {
+        padding: 12px 16px;
+      }
+    }
+
+    /* Monitoring History */
+    .history-item {
+      margin-bottom: 12px;
+      padding: 12px;
+      border-left: 3px solid var(--error);
+    }
+
+    /* === Interactive Tutorial Styles === */
+    #tutorial-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.7);
+      z-index: 9998;
+      display: none;
+      backdrop-filter: blur(2px);
+    }
+
+    #tutorial-overlay.active {
+      display: block;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .tutorial-spotlight {
+      position: absolute;
+      border: 3px solid var(--primary);
+      border-radius: 8px;
+      box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.7), 0 0 20px rgba(14, 165, 233, 0.5);
+      pointer-events: none;
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 9999;
+      display: none;
+    }
+
+    .tutorial-spotlight.active {
+      display: block;
+    }
+
+    #tutorial-tooltip {
+      position: fixed;
+      background: white;
+      border-radius: 12px;
+      padding: 24px;
+      max-width: 400px;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+      z-index: 10000;
+      display: none;
+      animation: slideUp 0.3s ease;
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    #tutorial-tooltip.active {
+      display: block;
+    }
+
+    .tutorial-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .tutorial-icon {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: bold;
+      font-size: 1.2rem;
+    }
+
+    .tutorial-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text-main);
+      flex: 1;
+    }
+
+    .tutorial-close {
+      background: none;
+      border: none;
+      font-size: 1.5rem;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 0;
+      width: 30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      transition: all 0.2s;
+    }
+
+    .tutorial-close:hover {
+      background: #f1f5f9;
+      color: var(--text-main);
+    }
+
+    .tutorial-content {
+      color: var(--text-muted);
+      line-height: 1.6;
+      margin-bottom: 20px;
+      font-size: 0.95rem;
+    }
+
+    .tutorial-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .tutorial-progress {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .tutorial-buttons {
+      display: flex;
+      gap: 10px;
+    }
+
+    .tutorial-btn {
+      padding: 8px 16px;
+      border-radius: 6px;
+      border: none;
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .tutorial-btn-skip {
+      background: #f1f5f9;
+      color: var(--text-muted);
+    }
+
+    .tutorial-btn-skip:hover {
+      background: #e2e8f0;
+    }
+
+    .tutorial-btn-prev {
+      background: white;
+      color: var(--primary);
+      border: 1px solid var(--primary);
+    }
+
+    .tutorial-btn-prev:hover {
+      background: #f0f9ff;
+    }
+
+    .tutorial-btn-next {
+      background: var(--primary);
+      color: white;
+    }
+
+    .tutorial-btn-next:hover {
+      background: var(--primary-dark);
+    }
+
+    .tutorial-btn-finish {
+      background: var(--success);
+      color: white;
+    }
+
+    .tutorial-btn-finish:hover {
+      filter: brightness(110%);
+    }
+
+    /* Tutorial Start Button */
+    #start-tutorial-btn {
+      position: fixed;
+      bottom: 30px;
+      right: 30px;
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      color: white;
+      border: none;
+      font-size: 1.5rem;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(14, 165, 233, 0.4);
+      z-index: 1000;
+      transition: all 0.3s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #start-tutorial-btn:hover {
+      transform: scale(1.1);
+      box-shadow: 0 6px 20px rgba(14, 165, 233, 0.5);
+    }
+
+    #start-tutorial-btn.hidden {
+      display: none;
+    }
+
+    /* === History Viewer Modal === */
+    #history-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.7);
+      z-index: 10001;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(3px);
+    }
+
+    #history-modal.active {
+      display: flex;
+    }
+
+    .history-modal-content {
+      background: white;
+      border-radius: 16px;
+      width: 90%;
+      max-width: 800px;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      animation: slideUp 0.3s ease;
+    }
+
+    .history-modal-header {
+      padding: 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .history-modal-header h3 {
+      margin: 0;
+      color: var(--text-main);
+      font-size: 1.3rem;
+    }
+
+    .history-stats {
+      display: flex;
+      gap: 20px;
+      margin-top: 8px;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+
+    .history-modal-body {
+      padding: 24px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .history-turn {
+      margin-bottom: 20px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid #f1f5f9;
+    }
+
+    .history-turn:last-child {
+      border-bottom: none;
+    }
+
+    .history-user-msg {
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      color: white;
+      padding: 12px 16px;
+      border-radius: 12px 12px 4px 12px;
+      margin-bottom: 8px;
+      max-width: 80%;
+      margin-left: auto;
+    }
+
+    .history-coach-msg {
+      background: #f1f5f9;
+      color: var(--text-main);
+      padding: 12px 16px;
+      border-radius: 12px 12px 12px 4px;
+      max-width: 80%;
+    }
+
+    .history-msg-label {
+      font-weight: 600;
+      font-size: 0.85rem;
+      margin-bottom: 4px;
+      opacity: 0.8;
+    }
+
+    .history-modal-footer {
+      padding: 16px 24px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    .history-close-btn {
+      padding: 10px 20px;
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .history-close-btn:hover {
+      background: var(--primary-dark);
+    }
+
+    .history-export-btn {
+      padding: 10px 20px;
+      background: white;
+      color: var(--primary);
+      border: 1px solid var(--primary);
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .history-export-btn:hover {
+      background: #f0f9ff;
     }
   </style>
 </head>
 
 <body>
-  <!-- ---------------- Left: Chat Panel ---------------- -->
-  <div id="left">
-    <div id="controls">
-      <label for="user-id">User ID:</label>
-      <input id="user-id" type="text" value="demo_user" />
-      <button id="reset-btn">Reset Session</button>
+
+  <header>
+    <div class="brand">Kerrio.AI</div>
+    <div class="header-controls">
+      <div style="display:flex; align-items:center; gap:8px; font-size:0.85rem; color:var(--text-muted);">
+        <span>User ID:</span>
+        <input id="user-id" type="text" value="demo_user"
+          style="width:100px; padding:4px 8px; border:1px solid #e2e8f0; border-radius:4px;">
+      </div>
+      <button id="view-history-btn" class="nav-btn" title="View Chat History">📜 History</button>
+      <button id="reset-btn" class="nav-btn">Reset</button>
     </div>
+  </header>
 
-    <div id="chat-log"></div>
-
-    <div id="input-row">
-      <input id="user-input" type="text" placeholder="Type your message..." />
-      <button id="send-btn">Send</button>
-    </div>
-
-    <div id="status"></div>
+  <!-- Journey Progress -->
+  <div class="journey-track" id="journey-bar">
+    <div class="step journey-stage" data-stage="registration">Registration</div>
+    <div class="step journey-stage" data-stage="history_collection">History</div>
+    <div class="step journey-stage" data-stage="consultation">Consultation</div>
+    <div class="step journey-stage" data-stage="diagnosis">Diagnosis</div>
+    <div class="step journey-stage" data-stage="proposal">Proposal</div>
+    <div class="step journey-stage" data-stage="treatment">Treatment</div>
+    <div class="step journey-stage" data-stage="monitoring">Monitoring</div>
   </div>
 
-  <!-- ---------------- Right: Cognitive Map Panel ---------------- -->
-  <div id="right">
-    <div id="map-controls">
-      <strong>Cognitive Map</strong>
-      <button id="refresh-map-btn">Refresh Map</button>
-      <button id="download-png-btn">Download PNG</button>
-      <button id="download-svg-btn">Download SVG</button>
+  <div id="app-container">
+    <!-- Left Column: Chat -->
+    <div class="col-left">
+      <div class="card chat-container">
+        <div id="chat-log"></div>
+        <div id="status" style="padding: 0 16px 8px; font-size: 0.75rem; color: var(--text-muted); text-align: right;">
+        </div>
+        <div class="input-area" id="input-row">
+          <input id="user-input" type="text" placeholder="Type your message to Kerrio..." />
+          <button id="send-btn" class="btn-send">➤</button>
+        </div>
+      </div>
     </div>
 
-    <div id="summary-box">
-      <strong>Map Summary:</strong>
-      <div id="mapSummary"></div>
+    <!-- Right Column: Map & Panels -->
+    <div class="col-right">
+
+      <!-- Cognitive Map Card -->
+      <div class="card" style="flex: 0 0 320px;">
+        <div class="map-header">
+          <strong>Cognitive Wiring Map</strong>
+          <div id="map-controls">
+            <button id="refresh-map-btn" class="nav-btn" title="Refresh Map">⟳</button>
+            <button id="expand-map-btn" class="nav-btn" title="Expand Map">⤢</button>
+            <button id="download-png-btn" class="nav-btn" style="padding: 4px 8px; font-size: 0.75rem;">PNG</button>
+            <button id="download-svg-btn" class="nav-btn" style="padding: 4px 8px; font-size: 0.75rem;">SVG</button>
+          </div>
+        </div>
+
+        <div style="position: relative; height: 100%;">
+          <!-- Advance Button Overlay -->
+          <div style="position:absolute; top:10px; right:10px; z-index:5;">
+            <button id="advance-btn" disabled>Advance Step →</button>
+          </div>
+
+          <div id="cy"></div>
+
+          <div id="mapStatus"
+            style="position:absolute; bottom:5px; left:10px; font-size:0.75rem; color:#64748b; pointer-events:none;">
+          </div>
+          <div id="summary-box" style="display:none;">
+            <div id="mapSummary"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Logic Panels Card -->
+      <div class="card" style="flex: 1; min-height: 400px;">
+        <div class="tabs-header" id="panel-tabs">
+          <button class="panel-tab" data-panel="pillars">Three Pillars</button>
+          <button class="panel-tab" data-panel="diagnosis">Diagnosis</button>
+          <button class="panel-tab" data-panel="treatment">Treatment</button>
+          <button class="panel-tab" data-panel="monitoring">Monitoring</button>
+        </div>
+
+        <div class="panel-content">
+          <!-- Pillars Panel -->
+          <div id="pillars-panel" class="panel-section">
+            <div class="pillar" id="history-pillar">
+              <h5>1. History Pillar</h5>
+              <div class="pillar-items" id="history-items">Loading...</div>
+            </div>
+            <div class="pillar" id="psych-pillar">
+              <h5>2. Psychology & Philosophy</h5>
+              <div class="pillar-items" id="psych-items">Loading...</div>
+            </div>
+            <div class="pillar" id="physio-pillar">
+              <h5>3. Physiology</h5>
+              <div class="pillar-items" id="physio-items">Loading...</div>
+            </div>
+          </div>
+
+          <!-- Diagnosis Panel -->
+          <div id="diagnosis-panel" class="panel-section">
+            <h4>Diagnosis (Mayo Clinic Model)</h4>
+            <div class="diagnosis-section" id="constraints-section">
+              <h5>Core Constraints:</h5>
+              <ul id="constraints-list"></ul>
+            </div>
+            <div class="diagnosis-section" id="bottlenecks-section">
+              <h5>Bottlenecks:</h5>
+              <ul id="bottlenecks-list"></ul>
+            </div>
+            <div class="diagnosis-section" id="causes-section">
+              <h5>Root Causes:</h5>
+              <ul id="causes-list"></ul>
+            </div>
+            <div class="diagnosis-section" id="explanation-section">
+              <h5>Explanation:</h5>
+              <div id="explanation-text"></div>
+            </div>
+            <div class="diagnosis-section" id="videos-section">
+              <h5>Recommended Educational Videos:</h5>
+              <div id="videos-list"></div>
+            </div>
+            <button class="confirm-btn" id="confirm-diagnosis-btn" disabled>
+              I Understand My Diagnosis
+            </button>
+          </div>
+
+          <!-- Treatment Panel -->
+          <div id="treatment-panel" class="panel-section">
+            <h4>Cognitive Rewiring Plan</h4>
+            <div id="current-wiring" class="metric-row">
+              <h5>Current Wiring:</h5>
+              <div id="current-wiring-text"
+                style="padding:8px; background:#f1f5f9; border-radius:6px; font-style:italic;"></div>
+            </div>
+            <div id="target-wiring" class="metric-row">
+              <h5>Target Wiring:</h5>
+              <div id="target-wiring-text" style="padding:8px; background:#ecfdf5; border-radius:6px; font-weight:500;">
+              </div>
+            </div>
+            <div id="rewiring-steps">
+              <h5>Rewiring Steps:</h5>
+              <div id="steps-list"></div>
+            </div>
+
+            <div style="margin-top:20px;">
+              <div style="font-size:0.8rem; margin-bottom:4px; display:flex; justify-content:space-between;">
+                <span>Protocol Progress</span>
+                <span id="progress-val"></span>
+              </div>
+              <div class="progress-bar" style="height: 6px; background: #e2e8f0; border-radius: 4px; overflow:hidden;">
+                <div class="progress-fill" id="treatment-progress"
+                  style="width: 0%; height:100%; background:var(--secondary); transition:width 0.5s;"></div>
+              </div>
+            </div>
+
+            <button class="confirm-btn" id="accept-treatment-btn" disabled>
+              Accept Treatment Plan
+            </button>
+          </div>
+
+          <!-- Monitoring Panel -->
+          <div id="monitoring-panel" class="panel-section">
+            <h4>Longitudinal Monitoring</h4>
+            <div
+              style="background:#fff1f2; padding:16px; border-radius:8px; border:1px solid #fecdd3; margin-bottom:20px;">
+              <div class="metric-row">
+                <label>Current Stress Level:</label>
+                <select id="mon-stress">
+                  <option value="low">Low</option>
+                  <option value="moderate">Moderate</option>
+                  <option value="high">High</option>
+                  <option value="severe">Severe</option>
+                </select>
+              </div>
+              <div class="metric-row">
+                <label>Cognitive Performance (1-10):</label>
+                <input type="number" id="mon-perf" min="1" max="10" value="7" />
+              </div>
+              <div class="metric-row">
+                <label>Observational Notes / Feedback:</label>
+                <textarea id="mon-notes" rows="3" placeholder="How are the new patterns holding up?"></textarea>
+              </div>
+              <button class="confirm-btn" id="submit-monitoring-btn" style="background: var(--error); margin-top:10px;">
+                Submit Feedback & Reassess
+              </button>
+            </div>
+
+            <!-- Monitoring History Display -->
+            <div id="monitoring-history">
+              <h5
+                style="margin-bottom: 12px; color: var(--text-main); border-bottom:1px solid #eee; padding-bottom:6px;">
+                Monitoring History</h5>
+              <div id="history-list" style="max-height: 250px; overflow-y: auto; padding-right:6px;">
+                <p style="color: var(--text-muted); font-size: 0.85rem; text-align:center; padding:20px;">No assessments
+                  submitted yet.</p>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
     </div>
-
-    <div id="cy"></div>
-
-    <div id="mapStatus"></div>
   </div>
 
-  <!-- Cytoscape + SVG -->
+  <!-- Libraries -->
   <script src="https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
   <script src="https://unpkg.com/cytoscape-svg@2.1.2/cytoscape-svg.min.js"></script>
 
+  <!-- Application Logic -->
   <script>
     if (typeof cytoscapeSvg !== "undefined") {
       cytoscape.use(cytoscapeSvg);
@@ -169,17 +1094,137 @@
 
     const sendBtn = document.getElementById("send-btn");
     const resetBtn = document.getElementById("reset-btn");
+    const advanceBtn = document.getElementById("advance-btn");
     const refreshMapBtn = document.getElementById("refresh-map-btn");
+    const expandMapBtn = document.getElementById("expand-map-btn");
     const downloadPngBtn = document.getElementById("download-png-btn");
     const downloadSvgBtn = document.getElementById("download-svg-btn");
 
+    // Refresh Map
+    refreshMapBtn.onclick = () => {
+      refreshMapBtn.classList.add("rotating");
+      loadCognitiveMap().then(() => {
+        setTimeout(() => refreshMapBtn.classList.remove("rotating"), 500);
+      });
+    };
+
+    // Expand/Collapse Map
+    expandMapBtn.onclick = () => {
+      const mapCard = document.getElementById('cy').closest('.card');
+      mapCard.classList.toggle('map-card-expanded');
+
+      const isExpanded = mapCard.classList.contains('map-card-expanded');
+
+      // Update button icon
+      expandMapBtn.textContent = isExpanded ? '⤡' : '⤢';
+      expandMapBtn.title = isExpanded ? 'Collapse Map' : 'Expand Map';
+
+      // Resize cytoscape
+      setTimeout(() => {
+        cy.resize();
+        cy.fit();
+      }, 50);
+    };
+
+    // Close expanded map on Esc
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        const mapCard = document.getElementById('cy').closest('.card');
+        if (mapCard.classList.contains('map-card-expanded')) {
+          mapCard.classList.remove('map-card-expanded');
+          expandMapBtn.textContent = '⤢';
+          expandMapBtn.title = 'Expand Map';
+          setTimeout(() => {
+            cy.resize();
+            cy.fit();
+          }, 50);
+        }
+      }
+    });
     let cy = null;
+    let currentStage = "registration";
+
+    // === Kerrio Journey Stage Management ===
+    const STAGE_ORDER = [
+      "registration", "history_collection", "consultation",
+      "diagnosis", "proposal", "treatment", "monitoring"
+    ];
+
+    function updateJourneyBar(stage, canAdvance) {
+      currentStage = stage;
+      const stageIdx = STAGE_ORDER.indexOf(stage);
+
+      // Using .journey-stage class to match data-stage attributes
+      document.querySelectorAll(".journey-stage").forEach((el, idx) => {
+        el.classList.remove("active", "completed");
+        if (idx < stageIdx) {
+          el.classList.add("completed");
+        } else if (idx === stageIdx) {
+          el.classList.add("active");
+          // Scroll into view logic for mobile stepper
+          el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+        }
+      });
+
+      advanceBtn.disabled = !canAdvance;
+      // Update text to indicate action
+      if (canAdvance) {
+        advanceBtn.textContent = "Advance →";
+        advanceBtn.title = "Move to next stage";
+      } else {
+        advanceBtn.textContent = "Advance";
+      }
+    }
+
+    async function loadJourneyStatus() {
+      const userId = userIdInput.value.trim() || "anon";
+      try {
+        const resp = await fetch(`${apiBase}/journey/${userId}`);
+        const data = await resp.json();
+        updateJourneyBar(data.current_stage, data.can_advance);
+        return data;
+      } catch (err) {
+        console.error("Failed to load journey status:", err);
+      }
+    }
+
+    async function advanceStage() {
+      const userId = userIdInput.value.trim() || "anon";
+      try {
+        const resp = await fetch(`${apiBase}/journey/advance`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: userId }),
+        });
+        const data = await resp.json();
+        if (data.success) {
+          statusEl.textContent = `Advanced to: ${data.new_stage}`;
+          updateJourneyBar(data.new_stage, false);
+          await loadJourneyStatus();
+
+          // Auto-switch panel based on stage
+          if (data.new_stage === 'history_collection' || data.new_stage === 'consultation') {
+            showPanel('pillars');
+          } else if (data.new_stage === 'diagnosis') {
+            showPanel('diagnosis');
+          } else if (data.new_stage === 'proposal' || data.new_stage === 'treatment') {
+            showPanel('treatment');
+          } else if (data.new_stage === 'monitoring') {
+            showPanel('monitoring');
+          }
+        } else {
+          statusEl.textContent = data.message;
+        }
+      } catch (err) {
+        console.error("Failed to advance stage:", err);
+      }
+    }
 
     // ---------------- Chat logic ----------------
     function appendMsg(role, text) {
       const div = document.createElement("div");
       div.className = role === "user" ? "msg-user" : "msg-coach";
-      div.textContent = (role === "user" ? "User: " : "Coach: ") + text;
+      div.textContent = text; // Content is just text, CSS adds prefix via pseudo-element for coach
       chatLog.appendChild(div);
       chatLog.scrollTop = chatLog.scrollHeight;
     }
@@ -191,7 +1236,7 @@
       const userId = userIdInput.value.trim() || "anon";
       appendMsg("user", msg);
       userInput.value = "";
-      statusEl.textContent = "Sending...";
+      statusEl.textContent = "Kerrio is thinking...";
 
       try {
         const res = await fetch(`${apiBase}/chat`, {
@@ -202,7 +1247,12 @@
 
         const data = await res.json();
         appendMsg("coach", data.reply || "");
-        statusEl.textContent = "Ready.";
+        statusEl.textContent = `Ready. Stage: ${data.journey_stage || currentStage}`;
+
+        // Update journey bar if stage info returned
+        if (data.journey_stage) {
+          updateJourneyBar(data.journey_stage, data.can_advance || false);
+        }
       } catch (err) {
         console.error(err);
         statusEl.textContent = "Error sending message.";
@@ -219,6 +1269,8 @@
         body: JSON.stringify({ user_id: userId }),
       });
       statusEl.textContent = "Session reset.";
+      // Reload UI
+      location.reload();
     }
 
     // ---------------- Map logic ----------------
@@ -233,7 +1285,7 @@
           body: JSON.stringify({ user_id: userId }),
         });
 
-        const data = await resp.json();
+        let data = await resp.json();
 
         if (data.error) {
           mapStatusEl.innerText = "No map: " + data.error;
@@ -241,9 +1293,38 @@
           return;
         }
 
+        // If API returns empty data, use example cognitive map
+        if (!data.nodes || data.nodes.length === 0) {
+          data = {
+            nodes: [
+              { id: "n1", label: "Perfectionism", type: "core_assumption", mentions: [1] },
+              { id: "n2", label: "Fear of failure", type: "emotion", mentions: [1, 2] },
+              { id: "n3", label: "Procrastination", type: "behaviour", mentions: [2, 3] },
+              { id: "n4", label: "Complete projects", type: "goal", mentions: [2] },
+              { id: "n5", label: "Self-doubt", type: "barrier", mentions: [1] },
+              { id: "n6", label: "I always fail", type: "recurrent_pattern", mentions: [1, 3] },
+              { id: "n7", label: "Phone scrolling", type: "behaviour", mentions: [3] },
+              { id: "n8", label: "Feeling anxious", type: "emotion", mentions: [3] },
+            ],
+            edges: [
+              { source: "n1", target: "n2", type: "triggers", evidence_turns: [1] },
+              { source: "n2", target: "n3", type: "leads_to", evidence_turns: [2] },
+              { source: "n3", target: "n4", type: "barrier_to", evidence_turns: [2] },
+              { source: "n1", target: "n5", type: "causes", evidence_turns: [1] },
+              { source: "n5", target: "n3", type: "influences", evidence_turns: [2] },
+              { source: "n1", target: "n6", type: "creates", evidence_turns: [1] },
+              { source: "n8", target: "n7", type: "triggers", evidence_turns: [3] },
+              { source: "n6", target: "n2", type: "leads_to", evidence_turns: [1] },
+            ],
+            summary: "📌 EXAMPLE MAP: Perfectionism pattern leading to procrastination. To see your own cognitive map, send messages expressing your thoughts, beliefs, goals, and emotions (see test script below)."
+          };
+          mapStatusEl.innerText = "Showing example map (no user data yet)";
+        } else {
+          mapStatusEl.innerText = "Map updated.";
+        }
+
         renderMap(data);
         mapSummaryEl.innerText = data.summary || "";
-        mapStatusEl.innerText = "Map updated.";
       } catch (err) {
         console.error(err);
         mapStatusEl.innerText = "Error loading map.";
@@ -253,6 +1334,7 @@
     function renderMap(data) {
       const elements = [];
 
+      // Extended color scheme for Kerrio Cognitive Wiring Map node types
       const typeColor = {
         goal: "#1e88e5",
         value: "#6a1b9a",
@@ -261,6 +1343,15 @@
         belief: "#fb8c00",
         action: "#00897b",
         outcome: "#5e35b1",
+        // Kerrio-specific types
+        core_assumption: "#d32f2f",
+        recurrent_pattern: "#7b1fa2",
+        hidden_constraint: "#c2185b",
+        trigger: "#f57c00",
+        emotion: "#0288d1",
+        behaviour: "#00796b",
+        bottleneck: "#ff5722",
+        core_constraint: "#b71c1c",
       };
 
       (data.nodes || []).forEach(n => {
@@ -351,6 +1442,7 @@
 
     sendBtn.onclick = sendMessage;
     resetBtn.onclick = resetSession;
+    advanceBtn.onclick = advanceStage;
     refreshMapBtn.onclick = refreshCogMap;
     downloadPngBtn.onclick = downloadPng;
     downloadSvgBtn.onclick = downloadSvg;
@@ -359,7 +1451,867 @@
       if (e.key === "Enter") sendMessage();
     });
 
-    statusEl.textContent = "Ready.";
+    // === Panel Tab Management ===
+    const panelTabs = document.querySelectorAll('.panel-tab');
+    const pillarsPanel = document.getElementById('pillars-panel');
+    const diagnosisPanel = document.getElementById('diagnosis-panel');
+    const treatmentPanel = document.getElementById('treatment-panel');
+    const monitoringPanel = document.getElementById('monitoring-panel');
+
+    const confirmDiagnosisBtn = document.getElementById('confirm-diagnosis-btn');
+    const acceptTreatmentBtn = document.getElementById('accept-treatment-btn');
+
+    // Helper to hide all panels
+    function hideAllPanels() {
+      pillarsPanel.classList.remove('visible');
+      diagnosisPanel.classList.remove('visible');
+      treatmentPanel.classList.remove('visible');
+      monitoringPanel.classList.remove('visible');
+      panelTabs.forEach(tab => tab.classList.remove('active'));
+    }
+
+    function showPanel(panelName) {
+      hideAllPanels();
+
+      if (panelName === 'pillars') {
+        pillarsPanel.classList.add('visible');
+        loadPillarsData();
+      } else if (panelName === 'diagnosis') {
+        diagnosisPanel.classList.add('visible');
+        loadDiagnosisData();
+      } else if (panelName === 'treatment') {
+        treatmentPanel.classList.add('visible');
+        loadTreatmentData();
+      } else if (panelName === 'monitoring') {
+        monitoringPanel.classList.add('visible');
+        loadMonitoringHistory();
+      }
+
+      panelTabs.forEach(tab => {
+        if (tab.dataset.panel === panelName) {
+          tab.classList.add('active');
+        }
+      });
+    }
+
+    panelTabs.forEach(tab => {
+      tab.addEventListener('click', () => showPanel(tab.dataset.panel));
+    });
+
+    // === Load Three Pillars Data ===
+    async function loadPillarsData() {
+      const userId = userIdInput.value.trim() || "anon";
+      try {
+        const resp = await fetch(`${apiBase}/journey/history/${userId}`);
+        const data = await resp.json();
+
+        // History pillar
+        const historyItems = [];
+        if (data.history_pillar.life_events?.length) {
+          historyItems.push(`Events: ${data.history_pillar.life_events.join(', ')}`);
+        }
+        if (data.history_pillar.recurrent_patterns?.length) {
+          historyItems.push(`Patterns: ${data.history_pillar.recurrent_patterns.join(', ')}`);
+        }
+        document.getElementById('history-items').textContent =
+          historyItems.length ? historyItems.join(' | ') : 'No data collected yet';
+
+        // Psychology pillar
+        const psychItems = [];
+        if (data.psychology_philosophy_pillar.beliefs?.length) {
+          psychItems.push(`Beliefs: ${data.psychology_philosophy_pillar.beliefs.join(', ')}`);
+        }
+        if (data.psychology_philosophy_pillar.values?.length) {
+          psychItems.push(`Values: ${data.psychology_philosophy_pillar.values.join(', ')}`);
+        }
+        document.getElementById('psych-items').textContent =
+          psychItems.length ? psychItems.join(' | ') : 'No data collected yet';
+
+        // Physiology pillar
+        const physioItems = [];
+        if (data.physiology_pillar.sleep_quality) {
+          physioItems.push(`Sleep: ${data.physiology_pillar.sleep_quality}`);
+        }
+        if (data.physiology_pillar.stress_level) {
+          physioItems.push(`Stress: ${data.physiology_pillar.stress_level}`);
+        }
+        document.getElementById('physio-items').textContent =
+          physioItems.length ? physioItems.join(' | ') : 'No data collected yet';
+
+      } catch (err) {
+        console.error('Failed to load pillars data:', err);
+      }
+    }
+
+    // === Load Diagnosis Data ===
+    async function loadDiagnosisData() {
+      const userId = userIdInput.value.trim() || "anon";
+      try {
+        const resp = await fetch(`${apiBase}/journey/diagnosis/${userId}`);
+        const data = await resp.json();
+        const diag = data.diagnosis;
+
+        // Core constraints
+        const constraintsList = document.getElementById('constraints-list');
+        constraintsList.innerHTML = '';
+        if (diag.core_constraints?.length) {
+          diag.core_constraints.forEach(c => {
+            const li = document.createElement('li');
+            li.textContent = c;
+            constraintsList.appendChild(li);
+          });
+        } else {
+          constraintsList.innerHTML = '<li>Continue history collection to identify constraints</li>';
+        }
+
+        // Bottlenecks
+        const bottlenecksList = document.getElementById('bottlenecks-list');
+        bottlenecksList.innerHTML = '';
+        if (diag.bottlenecks?.length) {
+          diag.bottlenecks.forEach(b => {
+            const li = document.createElement('li');
+            li.textContent = b;
+            bottlenecksList.appendChild(li);
+          });
+        } else {
+          bottlenecksList.innerHTML = '<li>None identified yet</li>';
+        }
+
+        // Root causes
+        const causesList = document.getElementById('causes-list');
+        causesList.innerHTML = '';
+        if (diag.root_causes?.length) {
+          diag.root_causes.forEach(c => {
+            const li = document.createElement('li');
+            li.textContent = c;
+            causesList.appendChild(li);
+          });
+        } else {
+          causesList.innerHTML = '<li>None identified yet</li>';
+        }
+
+        // Explanation
+        document.getElementById('explanation-text').textContent =
+          diag.explanation || 'Diagnosis in progress...';
+
+        // Videos
+        const videosList = document.getElementById('videos-list');
+        videosList.innerHTML = '';
+        if (diag.recommended_videos?.length) {
+          diag.recommended_videos.forEach(v => {
+            const div = document.createElement('div');
+            div.className = 'video-rec';
+            div.innerHTML = `
+              <div class="title">${v.title}</div>
+              <div class="relevance">${v.relevance}</div>
+            `;
+            videosList.appendChild(div);
+          });
+        } else {
+          videosList.innerHTML = '<div>No videos recommended yet</div>';
+        }
+
+        // Enable confirm button if there's actual diagnosis content
+        confirmDiagnosisBtn.disabled = !diag.core_constraints?.length || diag.client_understood;
+        if (diag.client_understood) {
+          confirmDiagnosisBtn.textContent = 'Diagnosis Confirmed';
+        }
+
+      } catch (err) {
+        console.error('Failed to load diagnosis:', err);
+      }
+    }
+
+    // === Load Treatment Data ===
+    async function loadTreatmentData() {
+      const userId = userIdInput.value.trim() || "anon";
+      try {
+        const resp = await fetch(`${apiBase}/journey/treatment/${userId}`);
+        const data = await resp.json();
+
+        if (data.error) {
+          document.getElementById('current-wiring-text').textContent = data.message;
+          document.getElementById('target-wiring-text').textContent = '';
+          document.getElementById('steps-list').innerHTML = '';
+          acceptTreatmentBtn.disabled = true;
+          return;
+        }
+
+        const rmap = data.treatment_proposal.rewiring_map;
+
+        document.getElementById('current-wiring-text').textContent =
+          rmap.current_wiring || 'Not yet determined';
+        document.getElementById('target-wiring-text').textContent =
+          rmap.target_wiring || 'Not yet determined';
+
+        // Rewiring steps
+        const stepsList = document.getElementById('steps-list');
+        stepsList.innerHTML = '';
+        if (rmap.steps?.length) {
+          rmap.steps.forEach((step, idx) => {
+            const div = document.createElement('div');
+            div.className = 'rewiring-step';
+
+            // Checkmark or simple circle
+            const isDone = step.completed;
+            const statusIcon = isDone ? '✓' : (idx + 1);
+            const statusBg = isDone ? 'var(--success)' : 'var(--secondary)';
+
+            div.innerHTML = `
+              <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <div style="display:flex; gap:10px;">
+                   <span style="flex-shrink:0; display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; background:${statusBg}; color:white; border-radius:50%; font-size:12px; font-weight:bold;">${statusIcon}</span>
+                   <div>
+                       <strong style="display:block; margin-bottom:4px;">${step.name}</strong>
+                       <span style="font-size: 0.85rem; color:var(--text-muted);">${step.description}</span>
+                   </div>
+                </div>
+                <button class="step-complete-btn"
+                        data-id="${step.id}"
+                        ${isDone ? 'disabled' : ''}
+                        style="padding: 4px 10px; font-size: 0.75rem; border:1px solid var(--border); border-radius:12px; background: ${isDone ? '#f1f5f9' : 'white'}; color: ${isDone ? '#94a3b8' : 'var(--primary)'}; cursor: ${isDone ? 'default' : 'pointer'};">
+                  ${isDone ? 'Completed' : 'Mark Done'}
+                </button>
+              </div>
+            `;
+            stepsList.appendChild(div);
+          });
+
+          // Add click listeners for step completion
+          document.querySelectorAll('.step-complete-btn').forEach(btn => {
+            btn.onclick = (e) => completeStep(e.target.dataset.id);
+          });
+        }
+
+        // Progress bar
+        const progress = (rmap.progress || 0) * 100;
+        document.getElementById('treatment-progress').style.width = `${progress}%`;
+
+        // Enable accept button
+        acceptTreatmentBtn.disabled = data.treatment_proposal.client_accepted;
+        if (data.treatment_proposal.client_accepted) {
+          acceptTreatmentBtn.textContent = 'Treatment Accepted';
+        }
+
+      } catch (err) {
+        console.error('Failed to load treatment:', err);
+      }
+    }
+
+    async function completeStep(stepId) {
+      const userId = userIdInput.value.trim() || "anon";
+      try {
+        const resp = await fetch(`${apiBase}/journey/treatment/step/complete`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: userId, step_id: stepId })
+        });
+        const data = await resp.json();
+        if (data.success) {
+          await loadTreatmentData();
+          await loadJourneyStatus();
+        }
+      } catch (err) {
+        console.error('Failed to complete step:', err);
+      }
+    }
+
+    async function submitMonitoring() {
+      const userId = userIdInput.value.trim() || "anon";
+      const submitBtn = document.getElementById('submit-monitoring-btn');
+
+      // Get values
+      const metrics = {
+        stress_level: document.getElementById('mon-stress').value,
+        performance_rating: parseInt(document.getElementById('mon-perf').value)
+      };
+      const notes = document.getElementById('mon-notes').value;
+
+      // Validation
+      if (!notes || notes.trim() === '') {
+        alert('⚠️ Please provide some feedback notes before submitting.');
+        return;
+      }
+
+      // Show loading state
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Submitting...';
+      statusEl.textContent = 'Submitting feedback...';
+
+      try {
+        const resp = await fetch(`${apiBase}/journey/monitoring/submit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: userId, metrics, notes })
+        });
+
+        if (!resp.ok) {
+          throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+        }
+
+        const data = await resp.json();
+
+        if (data.success) {
+          // Success feedback
+          statusEl.textContent = '✅ ' + data.message;
+
+          // Show success alert
+          alert(`✅ Feedback Submitted!\n\n${data.message}\n\nStress: ${metrics.stress_level}\nPerformance: ${metrics.performance_rating}/10`);
+
+          // Clear input fields
+          document.getElementById('mon-notes').value = '';
+          document.getElementById('mon-stress').value = 'low';
+          document.getElementById('mon-perf').value = '5';
+
+          // Reload monitoring history
+          await loadMonitoringHistory();
+
+          // Check for rediagnosis
+          if (data.should_rediagnose) {
+            alert('⚠️ Significant Issues Detected\n\nReturning to Consultation phase for reassessment.');
+          }
+
+          // Reload journey status
+          await loadJourneyStatus();
+        } else {
+          throw new Error(data.message || 'Submission failed');
+        }
+      } catch (err) {
+        console.error('Failed to submit monitoring:', err);
+        statusEl.textContent = '❌ Error: ' + err.message;
+        alert(`❌ Submission Failed\n\n${err.message}\n\nPlease try again or check the console for details.`);
+      } finally {
+        // Restore button state
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Submit Feedback & Reassess';
+      }
+    }
+
+    // === Load Monitoring History ===
+    async function loadMonitoringHistory() {
+      const userId = userIdInput.value.trim() || "anon";
+      try {
+        const resp = await fetch(`${apiBase}/journey/${userId}`);
+        const data = await resp.json();
+
+        const historyList = document.getElementById('history-list');
+        historyList.innerHTML = '';
+
+        if (data.monitoring && data.monitoring.assessments && data.monitoring.assessments.length > 0) {
+          // Display assessments in reverse chronological order (newest first)
+          const assessments = [...data.monitoring.assessments].reverse();
+
+          assessments.forEach((assessment, index) => {
+            const item = document.createElement('div');
+            item.className = 'history-item';
+
+            const timestamp = new Date(assessment.timestamp).toLocaleString();
+            const metrics = assessment.metrics || {};
+            const notes = assessment.notes || 'No notes';
+
+            item.innerHTML = `
+              <div class="timestamp">#${assessments.length - index} - ${timestamp}</div>
+              <div class="metrics">
+                Stress: ${metrics.stress_level || 'N/A'} | 
+                Performance: ${metrics.performance_rating || 'N/A'}/10
+              </div>
+              <div class="notes">"${notes}"</div>
+            `;
+
+            historyList.appendChild(item);
+          });
+        } else {
+          historyList.innerHTML = '<p style="color: #666; font-size: 12px; text-align:center; padding:10px;">No assessments submitted yet.</p>';
+        }
+      } catch (err) {
+        console.error('Failed to load monitoring history:', err);
+      }
+    }
+
+    // === Confirm Diagnosis ===
+    async function confirmDiagnosis() {
+      const userId = userIdInput.value.trim() || "anon";
+      try {
+        const resp = await fetch(`${apiBase}/journey/diagnosis/confirm/${userId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await resp.json();
+        if (data.success) {
+          confirmDiagnosisBtn.textContent = 'Diagnosis Confirmed';
+          confirmDiagnosisBtn.disabled = true;
+          statusEl.textContent = 'Diagnosis understood. You can now view the treatment plan.';
+          await loadJourneyStatus();
+          await loadDiagnosisData(); // Reload to ensure UI state sync
+        }
+      } catch (err) {
+        console.error('Failed to confirm diagnosis:', err);
+      }
+    }
+
+    // === Accept Treatment ===
+    async function acceptTreatment() {
+      const userId = userIdInput.value.trim() || "anon";
+      try {
+        const resp = await fetch(`${apiBase}/journey/treatment/accept/${userId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await resp.json();
+        if (data.success) {
+          acceptTreatmentBtn.textContent = 'Treatment Accepted';
+          acceptTreatmentBtn.disabled = true;
+          statusEl.textContent = 'Treatment accepted. Beginning cognitive rewiring.';
+          await loadJourneyStatus();
+          await loadTreatmentData(); // Reload to ensure UI state sync
+        }
+      } catch (err) {
+        console.error('Failed to accept treatment:', err);
+      }
+    }
+
+    // === Load Chat History ===
+    async function loadChatHistory() {
+      const userId = userIdInput.value.trim() || "anon";
+      try {
+        const resp = await fetch(`${apiBase}/journey/${userId}`);
+        const data = await resp.json();
+        // Clear chat log first
+        chatLog.innerHTML = '';
+        // Load conversation history if available
+        if (data.conversation_history && data.conversation_history.length > 0) {
+          data.conversation_history.forEach(turn => {
+            if (turn.user) {
+              appendMsg('user', turn.user);
+            }
+            if (turn.coach) {
+              appendMsg('coach', turn.coach);
+            }
+          });
+        }
+      } catch (err) {
+        console.error('Failed to load chat history:', err);
+      }
+    }
+
+    confirmDiagnosisBtn.onclick = confirmDiagnosis;
+    acceptTreatmentBtn.onclick = acceptTreatment;
+    document.getElementById('submit-monitoring-btn').onclick = submitMonitoring;
+
+    // Load initial journey status and chat history
+    loadJourneyStatus().then(() => {
+      statusEl.textContent = `Ready. Stage: ${currentStage}`;
+      loadChatHistory(); // Load chat history
+      // Initial panel show
+      if (currentStage === 'registration' || currentStage === 'history_collection') {
+        showPanel('pillars');
+      } else {
+        // Try to match current stage to panel, defaults to pillars if unknown
+        if (['diagnosis'].includes(currentStage)) showPanel('diagnosis');
+        else if (['proposal', 'treatment'].includes(currentStage)) showPanel('treatment');
+        else if (['monitoring'].includes(currentStage)) showPanel('monitoring');
+        else showPanel('pillars');
+      }
+    });
   </script>
+
+  <!-- Tutorial Elements -->
+  <div id="tutorial-overlay"></div>
+  <div class="tutorial-spotlight" id="tutorial-spotlight"></div>
+  <div id="tutorial-tooltip">
+    <div class="tutorial-header">
+      <div class="tutorial-icon" id="tutorial-step-icon">1</div>
+      <div class="tutorial-title" id="tutorial-title">Welcome!</div>
+      <button class="tutorial-close" id="tutorial-close">×</button>
+    </div>
+    <div class="tutorial-content" id="tutorial-content">
+      Let's take a tour of Kerrio.AI!
+    </div>
+    <div class="tutorial-actions">
+      <div class="tutorial-progress" id="tutorial-progress">Step 1 of 10</div>
+      <div class="tutorial-buttons">
+        <button class="tutorial-btn tutorial-btn-skip" id="tutorial-skip">Skip Tour</button>
+        <button class="tutorial-btn tutorial-btn-prev" id="tutorial-prev" style="display:none;">← Back</button>
+        <button class="tutorial-btn tutorial-btn-next" id="tutorial-next">Next →</button>
+      </div>
+    </div>
+  </div>
+  <button id="start-tutorial-btn" title="Start Tutorial">?</button>
+
+  <!-- History Viewer Modal -->
+  <div id="history-modal">
+    <div class="history-modal-content">
+      <div class="history-modal-header">
+        <div>
+          <h3>Chat History</h3>
+          <div class="history-stats">
+            <span id="history-user-id"></span>
+            <span id="history-stage"></span>
+            <span id="history-message-count"></span>
+          </div>
+        </div>
+      </div>
+      <div class="history-modal-body" id="history-list">
+        <p style="text-align: center; color: var(--text-muted);">Loading...</p>
+      </div>
+      <div class="history-modal-footer">
+        <button class="history-export-btn" id="history-export-btn">💾 Export JSON</button>
+        <button class="history-close-btn" id="history-close-btn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- History & Reset JavaScript -->
+  <script>
+    const viewHistoryBtn = document.getElementById('view-history-btn');
+    const historyModal = document.getElementById('history-modal');
+    const historyList = document.getElementById('history-list');
+    const historyCloseBtn = document.getElementById('history-close-btn');
+    const historyExportBtn = document.getElementById('history-export-btn');
+    const historyUserId = document.getElementById('history-user-id');
+    const historyStage = document.getElementById('history-stage');
+    const historyMessageCount = document.getElementById('history-message-count');
+
+    // View History
+    viewHistoryBtn.onclick = async () => {
+      const userId = userIdInput.value.trim() || "demo_user";
+
+      // Show modal
+      historyModal.classList.add('active');
+      historyList.innerHTML = '<p style="text-align: center; color: var(--text-muted);">Loading...</p>';
+
+      try {
+        const resp = await fetch(`${apiBase}/users/${userId}/history`);
+        const data = await resp.json();
+
+        if (data.error) {
+          historyList.innerHTML = `<p style="text-align: center; color: var(--error);">${data.error}</p>`;
+          return;
+        }
+
+        // Update stats
+        historyUserId.textContent = `User: ${data.user_id}`;
+        historyStage.textContent = `Stage: ${data.stage}`;
+        historyMessageCount.textContent = `Messages: ${data.conversation_turns}`;
+
+        // Render conversation history
+        if (data.conversation_history && data.conversation_history.length > 0) {
+          historyList.innerHTML = data.conversation_history.map((turn, i) => `
+            <div class="history-turn">
+              <div class="history-user-msg">
+                <div class="history-msg-label">You:</div>
+                ${turn.user || '(empty)'}
+              </div>
+              <div class="history-coach-msg">
+                <div class="history-msg-label">Kerrio:</div>
+                ${turn.coach || '(empty)'}
+              </div>
+            </div>
+          `).join('');
+        } else {
+          historyList.innerHTML = '<p style="text-align: center; color: var(--text-muted);">No conversation history yet.</p>';
+        }
+
+      } catch (err) {
+        console.error(err);
+        historyList.innerHTML = '<p style="text-align: center; color: var(--error);">Error loading history.</p>';
+      }
+    };
+
+    // Close history modal
+    historyCloseBtn.onclick = () => {
+      historyModal.classList.remove('active');
+    };
+
+    // Close on background click
+    historyModal.onclick = (e) => {
+      if (e.target === historyModal) {
+        historyModal.classList.remove('active');
+      }
+    };
+
+    // Export history as JSON
+    historyExportBtn.onclick = async () => {
+      const userId = userIdInput.value.trim() || "demo_user";
+
+      try {
+        const resp = await fetch(`${apiBase}/users/${userId}/history`);
+        const data = await resp.json();
+
+        // Create downloadable JSON file
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `kerrio_history_${userId}_${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        statusEl.textContent = "History exported!";
+      } catch (err) {
+        console.error(err);
+        statusEl.textContent = "Export failed.";
+      }
+    };
+
+    // Improved Reset with confirmation and backup
+    resetBtn.onclick = async () => {
+      const userId = userIdInput.value.trim() || "demo_user";
+
+      // Confirmation dialog
+      const confirmed = confirm(
+        `⚠️ Reset Session\n\n` +
+        `This will clear ALL data for user: ${userId}\n` +
+        `Current stage: ${currentStage}\n\n` +
+        `Are you sure you want to continue?`
+      );
+
+      if (!confirmed) return;
+
+      // Ask about backup
+      const backup = confirm(
+        `💾 Create Backup?\n\n` +
+        `Do you want to backup your current data before resetting?\n` +
+        `(Backup will be saved to runs/chat_logs/)`
+      );
+
+      chatLog.innerHTML = "";
+      statusEl.textContent = "Resetting session...";
+
+      try {
+        const resp = await fetch(`${apiBase}/reset?backup=${backup}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: userId }),
+        });
+
+        const data = await resp.json();
+
+        if (data.ok) {
+          statusEl.textContent = backup ?
+            "Session reset (backup created)" :
+            "Session reset";
+
+          // Reload page after short delay
+          setTimeout(() => location.reload(), 1000);
+        } else {
+          statusEl.textContent = "Reset failed.";
+        }
+      } catch (err) {
+        console.error(err);
+        statusEl.textContent = "Error resetting session.";
+      }
+    };
+  </script>
+
+  <!-- Tutorial JavaScript -->
+  <script>
+    // Tutorial System
+    const tutorialSteps = [
+      {
+        title: "Welcome to Kerrio.AI! 🎉",
+        content: "Welcome to your Digital Cognitive Clinic! This interactive tour will guide you through the complete Kerrio journey, from Registration to Monitoring. Let's get started!",
+        target: ".brand",
+        position: "bottom"
+      },
+      {
+        title: "Journey Progress Bar",
+        content: "This bar shows your progress through the 7 stages of the Kerrio journey: Registration → History Collection → Consultation → Diagnosis → Proposal → Treatment → Monitoring. Each stage lights up as you advance.",
+        target: ".journey-track",
+        position: "bottom"
+      },
+      {
+        title: "Chat with Kerrio Assistant",
+        content: "This is where you'll have conversations with Kerrio, your AI coach. Share your thoughts, feelings, goals, and challenges here. The more you express, the better Kerrio can help you!",
+        target: "#chat-log",
+        position: "right"
+      },
+      {
+        title: "Send Messages",
+        content: "Type your messages here and click the send button (or press Enter). Try expressing things like: 'I feel stressed', 'I want to be healthier', 'I always procrastinate', etc.",
+        target: "#user-input",
+        position: "top"
+      },
+      {
+        title: "Cognitive Wiring Map 🧠",
+        content: "This map visualizes your cognitive patterns - beliefs, goals, emotions, and behaviors extracted from your conversations. Click the refresh button (⟳) to generate or update your map!",
+        target: "#cy",
+        position: "left"
+      },
+      {
+        title: "Advance Through Stages",
+        content: "When you've completed enough conversation in a stage, this button becomes active. Click it to move to the next stage of your journey. The system will guide you automatically!",
+        target: "#advance-btn",
+        position: "bottom"
+      },
+      {
+        title: "Three Pillars Panel",
+        content: "As you chat, Kerrio collects information across three pillars: History (life events), Psychology/Philosophy (beliefs, values), and Physiology (sleep, stress). This data forms the foundation for diagnosis.",
+        target: "#pillars-panel",
+        position: "left"
+      },
+      {
+        title: "Diagnosis Panel",
+        content: "Based on the Three Pillars, Kerrio identifies core constraints, bottlenecks, and root causes. You'll also get recommended educational videos. Review and confirm your diagnosis here.",
+        target: "#diagnosis-panel",
+        position: "left"
+      },
+      {
+        title: "Treatment Plan",
+        content: "Your personalized cognitive rewiring plan! See your current wiring pattern, target wiring, and step-by-step actions. Mark steps as complete and track your progress.",
+        target: "#treatment-panel",
+        position: "left"
+      },
+      {
+        title: "Longitudinal Monitoring",
+        content: "Track your progress over time! Submit regular check-ins with stress levels, performance ratings, and notes. Kerrio monitors for significant issues and can trigger re-diagnosis if needed. You're all set! 🎉",
+        target: "#monitoring-panel",
+        position: "left"
+      }
+    ];
+
+    let currentTutorialStep = 0;
+    const tutorialOverlay = document.getElementById('tutorial-overlay');
+    const tutorialSpotlight = document.getElementById('tutorial-spotlight');
+    const tutorialTooltip = document.getElementById('tutorial-tooltip');
+    const tutorialTitle = document.getElementById('tutorial-title');
+    const tutorialContent = document.getElementById('tutorial-content');
+    const tutorialProgress = document.getElementById('tutorial-progress');
+    const tutorialStepIcon = document.getElementById('tutorial-step-icon');
+    const tutorialNext = document.getElementById('tutorial-next');
+    const tutorialPrev = document.getElementById('tutorial-prev');
+    const tutorialSkip = document.getElementById('tutorial-skip');
+    const tutorialClose = document.getElementById('tutorial-close');
+    const startTutorialBtn = document.getElementById('start-tutorial-btn');
+
+    function showTutorialStep(stepIndex) {
+      if (stepIndex < 0 || stepIndex >= tutorialSteps.length) {
+        endTutorial();
+        return;
+      }
+
+      currentTutorialStep = stepIndex;
+      const step = tutorialSteps[stepIndex];
+
+      // Update content
+      tutorialTitle.textContent = step.title;
+      tutorialContent.textContent = step.content;
+      tutorialProgress.textContent = `Step ${stepIndex + 1} of ${tutorialSteps.length}`;
+      tutorialStepIcon.textContent = stepIndex + 1;
+
+      // Update buttons
+      tutorialPrev.style.display = stepIndex > 0 ? 'block' : 'none';
+
+      if (stepIndex === tutorialSteps.length - 1) {
+        tutorialNext.textContent = 'Finish ✓';
+        tutorialNext.className = 'tutorial-btn tutorial-btn-finish';
+      } else {
+        tutorialNext.textContent = 'Next →';
+        tutorialNext.className = 'tutorial-btn tutorial-btn-next';
+      }
+
+      // Position spotlight and tooltip
+      const targetEl = document.querySelector(step.target);
+      if (targetEl) {
+        const rect = targetEl.getBoundingClientRect();
+
+        // Position spotlight
+        tutorialSpotlight.style.top = `${rect.top - 5}px`;
+        tutorialSpotlight.style.left = `${rect.left - 5}px`;
+        tutorialSpotlight.style.width = `${rect.width + 10}px`;
+        tutorialSpotlight.style.height = `${rect.height + 10}px`;
+
+        // Position tooltip
+        positionTooltip(rect, step.position);
+      }
+
+      // Show elements
+      // Show elements
+      tutorialOverlay.classList.add('active');
+      tutorialTooltip.classList.add('active');
+      tutorialSpotlight.classList.add('active');
+    }
+
+    function positionTooltip(targetRect, position) {
+      const tooltipRect = tutorialTooltip.getBoundingClientRect();
+      const padding = 20;
+
+      let top, left;
+
+      switch (position) {
+        case 'bottom':
+          top = targetRect.bottom + padding;
+          left = targetRect.left + (targetRect.width / 2) - (tooltipRect.width / 2);
+          break;
+        case 'top':
+          top = targetRect.top - tooltipRect.height - padding;
+          left = targetRect.left + (targetRect.width / 2) - (tooltipRect.width / 2);
+          break;
+        case 'left':
+          top = targetRect.top + (targetRect.height / 2) - (tooltipRect.height / 2);
+          left = targetRect.left - tooltipRect.width - padding;
+          break;
+        case 'right':
+          top = targetRect.top + (targetRect.height / 2) - (tooltipRect.height / 2);
+          left = targetRect.right + padding;
+          break;
+        default:
+          top = targetRect.bottom + padding;
+          left = targetRect.left;
+      }
+
+      // Keep tooltip in viewport
+      const maxTop = window.innerHeight - tooltipRect.height - 20;
+      const maxLeft = window.innerWidth - tooltipRect.width - 20;
+
+      top = Math.max(20, Math.min(top, maxTop));
+      left = Math.max(20, Math.min(left, maxLeft));
+
+      tutorialTooltip.style.top = `${top}px`;
+      tutorialTooltip.style.left = `${left}px`;
+    }
+
+    function endTutorial() {
+      tutorialOverlay.classList.remove('active');
+      tutorialTooltip.classList.remove('active');
+      tutorialSpotlight.classList.remove('active');
+      currentTutorialStep = 0;
+
+      // Save that user has seen tutorial
+      localStorage.setItem('kerrio_tutorial_completed', 'true');
+      startTutorialBtn.classList.remove('hidden');
+    }
+
+    function startTutorial() {
+      startTutorialBtn.classList.add('hidden');
+      showTutorialStep(0);
+    }
+
+    // Event listeners
+    tutorialNext.onclick = () => showTutorialStep(currentTutorialStep + 1);
+    tutorialPrev.onclick = () => showTutorialStep(currentTutorialStep - 1);
+    tutorialSkip.onclick = endTutorial;
+    tutorialClose.onclick = endTutorial;
+    startTutorialBtn.onclick = startTutorial;
+
+    // Auto-start tutorial for first-time users
+    window.addEventListener('load', () => {
+      const hasSeenTutorial = localStorage.getItem('kerrio_tutorial_completed');
+      if (!hasSeenTutorial) {
+        setTimeout(startTutorial, 1000); // Start after 1 second
+      }
+    });
+
+    // Handle window resize
+    window.addEventListener('resize', () => {
+      if (tutorialOverlay.classList.contains('active')) {
+        showTutorialStep(currentTutorialStep);
+      }
+    });
+  </script>
+
 </body>
+
 </html>

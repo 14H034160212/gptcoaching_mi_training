@@ -8,10 +8,11 @@ Run:
   # optional: export CLASSIFIER_PATH=/abs/path/to/mi-classifier
   # optional: export HF_TOKEN=hf_xxx   (if MODEL_PATH is a private HF repo)
   # optional: export LOG_DIR=runs/chat_logs
-  uvicorn scripts.app_demo:app --host 0.0.0.0 --port 8000
+  uvicorn scripts.app_demo:app --host 0.0.0.0 --port 8080
 
 API:
   POST /api/chat   {user_id, history?, user_msg}  ->  {reply}
+  POST /api/journey/validate {user_id, invite_code} -> {success: bool}
   POST /api/score  {user_id, history?, user_msg?} ->  {labels, probs}
   POST /api/reset  {user_id} -> {ok: true}
   GET  /api/health -> model + device info
@@ -39,17 +40,43 @@ from transformers import (
     AutoModelForSequenceClassification,
 )
 
-from typing import List, Dict
+from typing import List, Dict, Any
 from pydantic import BaseModel
 
 from scripts.cogmap_utils import build_cognitive_map_from_session
+from scripts.kerrio_journey import (
+    KerriJourneyManager,
+    KerriClientProfile,
+    JourneyStage,
+    HISTORY_COLLECTION_PROMPTS,
+    diagnostic_engine,
+    rewiring_engine,
+    VIDEO_DATABASE,
+    Diagnosis,
+    CognitiveRewiringMap,
+)
 
+# Initialize Kerrio Journey Manager
+journey_manager = KerriJourneyManager()
 
-SYSTEM = (
+# Original MI system prompt (kept for backward compatibility)
+SYSTEM_MI = (
     "You are a supportive health coach using Motivational Interviewing (MI). "
     "Be non-judgmental; use open questions, reflective listening, and affirmations; "
     "ask permission before giving advice; avoid directives. Keep it concise."
 )
+
+# Kerrio system prompt (Mayo Clinic diagnostic model)
+SYSTEM_KERRIO = (
+    "You are Kerrio, a digital twin of Dr Kerry Spackman. "
+    "You are NOT a chatbot or motivation app. You are a digital cognitive clinic. "
+    "Your purpose is permanent human optimization through diagnosis and cognitive rewiring. "
+    "Follow the Mayo Clinic model: Accurate diagnosis before intervention. "
+    "Understanding is a prerequisite for permanent change."
+)
+
+# Default to Kerrio mode
+SYSTEM = SYSTEM_KERRIO
 
 # ===== Env =====
 MODEL_PATH = os.environ.get("MODEL_PATH", "").strip()
@@ -66,13 +93,38 @@ hf_kwargs = {"token": HF_TOKEN} if HF_TOKEN else {}
 
 # ===== Load main model =====
 print(f"[boot] MODEL_PATH={MODEL_PATH}")
-tok = AutoTokenizer.from_pretrained(MODEL_PATH, use_fast=False, trust_remote_code=True, **hf_kwargs)
-if tok.pad_token is None:
-    tok.pad_token = tok.eos_token
 
-model = AutoModelForCausalLM.from_pretrained(
-    MODEL_PATH, device_map="auto", trust_remote_code=True, **hf_kwargs
-).eval()
+# Check if MODEL_PATH is a PEFT adapter directory
+is_peft = os.path.exists(os.path.join(MODEL_PATH, "adapter_config.json"))
+
+if is_peft:
+    print("[boot] Detected PEFT adapter. Loading base model first.")
+    from peft import PeftModel
+    with open(os.path.join(MODEL_PATH, "adapter_config.json"), "r") as f:
+        import json
+        adapter_cfg = json.load(f)
+        base_model_path = adapter_cfg.get("base_model_name_or_path", "Qwen/Qwen2.5-3B-Instruct")
+    
+    # Load tokenizer from adapter path (it usually has the correct overrides)
+    tok = AutoTokenizer.from_pretrained(MODEL_PATH, use_fast=False, trust_remote_code=True, **hf_kwargs)
+    if tok.pad_token is None:
+        tok.pad_token = tok.eos_token
+    
+    # Load base model
+    # Note: Removed device_map="auto" to prevent PEFT offloading errors on CPU
+    base_model = AutoModelForCausalLM.from_pretrained(
+        base_model_path, trust_remote_code=True, **hf_kwargs
+    )
+    # Load adapter
+    model = PeftModel.from_pretrained(base_model, MODEL_PATH).eval()
+else:
+    # Standard full model load
+    tok = AutoTokenizer.from_pretrained(MODEL_PATH, use_fast=False, trust_remote_code=True, **hf_kwargs)
+    if tok.pad_token is None:
+        tok.pad_token = tok.eos_token
+    model = AutoModelForCausalLM.from_pretrained(
+        MODEL_PATH, device_map="auto", trust_remote_code=True, **hf_kwargs
+    ).eval()
 
 # ===== Optional classifier (for MI behavior scoring) =====
 cls_tok = cls_model = None
@@ -118,6 +170,25 @@ class ResetReq(BaseModel):
 class CogMapReq(BaseModel):
     user_id: str = "anon"
 
+class JourneyStatusReq(BaseModel):
+    user_id: str = "anon"
+
+class AdvanceStageReq(BaseModel):
+    user_id: str = "anon"
+
+class ValidateInviteReq(BaseModel):
+    user_id: str
+    invite_code: str
+
+class StepCompleteReq(BaseModel):
+    user_id: str
+    step_id: str
+
+class MonitoringReq(BaseModel):
+    user_id: str
+    metrics: Dict[str, Any]
+    notes: str
+
 
 # ===== Helpers =====
 def append_jsonl(user_id: str, payload: dict):
@@ -127,19 +198,47 @@ def append_jsonl(user_id: str, payload: dict):
         f.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
 
-def build_messages(history: List[Turn], user_msg: str, map_summary: Optional[str] = None):
+def build_messages(
+    history: List[Turn],
+    user_msg: str,
+    map_summary: Optional[str] = None,
+    kerrio_profile: Optional[KerriClientProfile] = None
+):
     """
     Build chat messages; if map_summary is provided, inject it into the system prompt
     as a kind of 'Graph-of-Thoughts' memory.
+
+    If kerrio_profile is provided, use stage-specific system prompt.
     """
-    sys_content = SYSTEM
+    # Use Kerrio stage-specific prompt if profile is available
+    if kerrio_profile:
+        sys_content = journey_manager.get_stage_system_prompt(kerrio_profile)
+    else:
+        sys_content = SYSTEM
+
     if map_summary:
         sys_content += (
-            "\n\nHere is a brief summary of the user's situation based on previous dialogue "
-            "(goals, values, barriers, actions):\n"
+            "\n\n=== COGNITIVE WIRING MAP SUMMARY ===\n"
             f"{map_summary}\n"
-            "Use this context to ask better MI-style questions, but do not repeat this summary verbatim."
+            "Use this diagnostic context to guide the conversation. "
+            "Do not repeat this summary verbatim to the client."
         )
+
+    # Add client history context for diagnosis/treatment stages
+    if kerrio_profile and kerrio_profile.stage in (
+        JourneyStage.CONSULTATION,
+        JourneyStage.DIAGNOSIS,
+        JourneyStage.PROPOSAL,
+        JourneyStage.TREATMENT,
+    ):
+        h = kerrio_profile.client_history
+        if h.psychology_philosophy.beliefs or h.psychology_philosophy.values:
+            sys_content += (
+                "\n\n=== CLIENT HISTORY SUMMARY ===\n"
+                f"Beliefs: {', '.join(h.psychology_philosophy.beliefs[:3]) or 'Not yet identified'}\n"
+                f"Values: {', '.join(h.psychology_philosophy.values[:3]) or 'Not yet identified'}\n"
+                f"Patterns: {', '.join(h.history.recurrent_patterns[:3]) or 'Not yet identified'}\n"
+            )
 
     msgs = [{"role": "system", "content": sys_content}]
     for t in history:
@@ -151,8 +250,13 @@ def build_messages(history: List[Turn], user_msg: str, map_summary: Optional[str
     return msgs
 
 
-def render_prompt(history: List[Turn], user_msg: str, map_summary: Optional[str] = None) -> str:
-    msgs = build_messages(history, user_msg, map_summary=map_summary)
+def render_prompt(
+    history: List[Turn],
+    user_msg: str,
+    map_summary: Optional[str] = None,
+    kerrio_profile: Optional[KerriClientProfile] = None
+) -> str:
+    msgs = build_messages(history, user_msg, map_summary=map_summary, kerrio_profile=kerrio_profile)
     return tok.apply_chat_template(
         msgs, tokenize=False, add_generation_prompt=True  # start a new assistant turn
     )
@@ -324,6 +428,9 @@ def health():
 @api.post("/chat")
 def chat_endpoint(req: ChatRequest):
     try:
+        # 0) Get or create Kerrio client profile for journey management
+        kerrio_profile = journey_manager.get_or_create_profile(req.user_id)
+
         # 1) Use server-side memory; seed once from client if provided
         mem = SESSIONS[req.user_id]
         if req.history and not mem:
@@ -342,9 +449,14 @@ def chat_endpoint(req: ChatRequest):
         except Exception as e:
             print(f"[warn] cogmap summary failed: {e}")
 
-        # 3) Prompt with last N turns + optional map summary
+        # 3) Prompt with last N turns + optional map summary + Kerrio profile
         recent_hist = [Turn(user=h["user"], coach=h["coach"]) for h in mem][-6:]
-        prompt = render_prompt(recent_hist, req.user_msg, map_summary=map_summary)
+        prompt = render_prompt(
+            recent_hist,
+            req.user_msg,
+            map_summary=map_summary,
+            kerrio_profile=kerrio_profile
+        )
         inputs = tok(prompt, return_tensors="pt").to(model.device)
 
         # 4) Generate (decode only new tokens)
@@ -385,11 +497,21 @@ def chat_endpoint(req: ChatRequest):
             "user": req.user_msg,
             "coach": reply,
             "history_len": len(mem),
+            "journey_stage": kerrio_profile.stage.value,  # Track journey stage
         }
         append_jsonl(req.user_id, record)
 
+        # 7) Update Kerrio profile with extracted insights
+        journey_manager.add_turn_and_extract(kerrio_profile, req.user_msg, reply)
+
         print("[chat] reply=", reply[:200].replace("\n", "\\n"))
-        return {"reply": reply or "(no content)"}
+        print(f"[kerrio] stage={kerrio_profile.stage.value}")
+
+        return {
+            "reply": reply or "(no content)",
+            "journey_stage": kerrio_profile.stage.value,
+            "can_advance": kerrio_profile.can_advance_stage(),
+        }
 
     except Exception as e:
         print(f"[error] chat generation failed: {e}")
@@ -445,10 +567,588 @@ def score_endpoint(req: ChatRequest):
     return {"labels": labels, "probs": probs}
 
 @api.post("/reset")
-def reset_endpoint(req: ResetReq):
+def reset_endpoint(req: ResetReq, backup: bool = False):
+    """Reset user session, optionally backup data"""
+    import shutil
+    
+    if backup:
+        # Backup current data
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_file = Path(LOG_DIR) / f"{req.user_id}_backup_{timestamp}.jsonl"
+        
+        original_file = Path(LOG_DIR) / f"{req.user_id}.jsonl"
+        if original_file.exists():
+            shutil.copy(original_file, backup_file)
+    
+    # Clear in-memory session
     SESSIONS.pop(req.user_id, None)
-    # also clear log file if you want (optional)
-    return {"ok": True}
+    
+    # Clear journey manager profile
+    if hasattr(journey_manager, 'profiles') and req.user_id in journey_manager.profiles:
+        del journey_manager.profiles[req.user_id]
+    
+    # Clear log file
+    log_file = Path(LOG_DIR) / f"{req.user_id}.jsonl"
+    if log_file.exists():
+        log_file.unlink()
+    
+    return {
+        "ok": True,
+        "message": f"Session reset for {req.user_id}",
+        "backup_created": backup
+    }
+
+@api.get("/users/{user_id}/history")
+def get_user_history(user_id: str):
+    """Get complete conversation history for a user"""
+    from dataclasses import asdict
+    
+    profile = journey_manager.get_profile(user_id)
+    
+    if not profile:
+        return {
+            "error": "User not found",
+            "user_id": user_id,
+            "conversation_history": [],
+            "stage": "unknown"
+        }
+    
+    # Load from JSONL file
+    log_history = []
+    log_file = Path(LOG_DIR) / f"{user_id}.jsonl"
+    
+    if log_file.exists():
+        with open(log_file, 'r', encoding='utf-8') as f:
+            for line in f:
+                try:
+                    record = json.loads(line)
+                    log_history.append(record)
+                except:
+                    pass
+    
+    return {
+        "user_id": user_id,
+        "stage": profile.stage.value,
+        "conversation_turns": len(profile.conversation_history),
+        "conversation_history": profile.conversation_history,
+        "log_history": log_history,
+        "pillars": {
+            "history": asdict(profile.client_history.history),
+            "psychology_philosophy": asdict(profile.client_history.psychology_philosophy),
+            "physiology": asdict(profile.client_history.physiology)
+        } if profile.client_history else None,
+        "diagnosis": asdict(profile.diagnosis) if profile.diagnosis else None,
+        "treatment_plan": asdict(profile.treatment_plan) if profile.treatment_plan else None,
+        "monitoring_history": profile.monitoring_history if hasattr(profile, 'monitoring_history') else []
+    }
+
+
+# === Kerrio Journey Management Endpoints ===
+
+@api.get("/journey/{user_id}")
+def get_journey_status(user_id: str):
+    """
+    Get the current Kerrio journey status for a user.
+    Returns stage, progress, and what's needed to advance.
+    """
+    profile = journey_manager.get_or_create_profile(user_id)
+
+    # Build stage requirements message
+    stage_info = {
+        JourneyStage.REGISTRATION: "Welcome phase. Ready to begin history collection.",
+        JourneyStage.HISTORY_COLLECTION: "Gathering history across three pillars: History, Psychology/Philosophy, Physiology.",
+        JourneyStage.CONSULTATION: "Clarifying ambiguities and uncovering blind spots.",
+        JourneyStage.DIAGNOSIS: "Building Cognitive Wiring Map and explaining root causes.",
+        JourneyStage.PROPOSAL: "Presenting personalized treatment plan.",
+        JourneyStage.TREATMENT: "Implementing cognitive rewiring interventions.",
+        JourneyStage.MONITORING: "Tracking progress and refining interventions.",
+    }
+
+    return {
+        "user_id": user_id,
+        "current_stage": profile.stage.value,
+        "stage_description": stage_info.get(profile.stage, ""),
+        "can_advance": profile.can_advance_stage(),
+        "registered_at": profile.registered_at,
+        "conversation_turns": len(profile.conversation_history),
+        "conversation_history": profile.conversation_history,  # Add full conversation history
+        "client_history_summary": {
+            "life_events_count": len(profile.client_history.history.life_events),
+            "beliefs_count": len(profile.client_history.psychology_philosophy.beliefs),
+            "values_count": len(profile.client_history.psychology_philosophy.values),
+        },
+        "clinician_insights_count": len(profile.clinician_notes.session_insights),
+        "is_validated": profile.is_validated_guest
+    }
+
+
+@api.post("/journey/validate")
+def validate_invite(req: ValidateInviteReq):
+    """
+    Validate a user's invitation code to allow them to proceed.
+    """
+    profile = journey_manager.get_or_create_profile(req.user_id)
+    if profile.validate_invite_code(req.invite_code):
+        journey_manager.save_profile(req.user_id)
+        return {"success": True, "message": "Invitation validated. Welcome to Kerrio."}
+    else:
+        return {"success": False, "message": "Invalid invitation code."}
+
+
+@api.post("/journey/proposal/accept")
+def accept_proposal(req: AdvanceStageReq):
+    """
+    Client accepts the treatment proposal.
+    """
+    profile = journey_manager.get_or_create_profile(req.user_id)
+    profile.treatment_proposal.client_accepted = True
+    journey_manager.save_profile(req.user_id)
+    return {"success": True, "message": "Treatment proposal accepted. Ready to begin."}
+
+
+@api.post("/journey/advance")
+def advance_journey_stage(req: AdvanceStageReq):
+    """
+    Attempt to advance the user to the next journey stage.
+    Returns success/failure and the new stage.
+    """
+    profile = journey_manager.get_or_create_profile(req.user_id)
+    old_stage = profile.stage.value
+
+    if profile.advance_stage():
+        journey_manager.save_profile(req.user_id)
+        return {
+            "success": True,
+            "old_stage": old_stage,
+            "new_stage": profile.stage.value,
+            "message": f"Advanced from {old_stage} to {profile.stage.value}",
+        }
+    else:
+        return {
+            "success": False,
+            "current_stage": profile.stage.value,
+            "message": "Cannot advance yet. Complete current stage requirements first.",
+            "can_advance": False,
+        }
+
+
+@api.get("/journey/prompts/{user_id}")
+def get_stage_prompts(user_id: str):
+    """
+    Get suggested prompts/questions for the current journey stage.
+    Useful for guiding the conversation.
+    """
+    profile = journey_manager.get_or_create_profile(user_id)
+
+    if profile.stage == JourneyStage.HISTORY_COLLECTION:
+        return {
+            "stage": profile.stage.value,
+            "prompts": HISTORY_COLLECTION_PROMPTS,
+            "instruction": "Guide the client through these three pillars of history collection.",
+        }
+    elif profile.stage == JourneyStage.CONSULTATION:
+        return {
+            "stage": profile.stage.value,
+            "prompts": {
+                "clarification": [
+                    "Can you tell me more about what you meant when you said...",
+                    "I noticed you mentioned X but didn't elaborate. Can we explore that?",
+                    "What was that experience like for you emotionally?",
+                ],
+                "blind_spot_probing": [
+                    "How do others close to you see this situation?",
+                    "Is there anything you've been avoiding thinking about?",
+                    "What would you not want me to ask about?",
+                ],
+            },
+            "instruction": "Uncover blind spots and clarify ambiguities. Maintain separation between client history and clinician notes.",
+        }
+    elif profile.stage == JourneyStage.DIAGNOSIS:
+        return {
+            "stage": profile.stage.value,
+            "prompts": {
+                "explanation": [
+                    "Based on what you've shared, here's what I'm seeing...",
+                    "The pattern that emerges is...",
+                    "The root cause appears to be...",
+                ],
+                "education": [
+                    "Let me explain the neuroscience behind this...",
+                    "Understanding WHY this happens is crucial before we can change it...",
+                ],
+            },
+            "instruction": "Explain the diagnosis clearly. Client must understand before proceeding to treatment.",
+        }
+    else:
+        return {
+            "stage": profile.stage.value,
+            "prompts": {},
+            "instruction": f"Continue with {profile.stage.value} phase.",
+        }
+
+
+@api.get("/journey/history/{user_id}")
+def get_client_history(user_id: str):
+    """
+    Get the client's collected history (three pillars).
+    Separate from clinician notes per Kerrio requirements.
+    """
+    profile = journey_manager.get_or_create_profile(user_id)
+    h = profile.client_history
+
+    return {
+        "user_id": user_id,
+        "history_pillar": {
+            "life_events": h.history.life_events,
+            "formative_experiences": h.history.formative_experiences,
+            "recurrent_patterns": h.history.recurrent_patterns,
+            "background_summary": h.history.background_summary,
+        },
+        "psychology_philosophy_pillar": {
+            "beliefs": h.psychology_philosophy.beliefs,
+            "values": h.psychology_philosophy.values,
+            "meaning_structures": h.psychology_philosophy.meaning_structures,
+            "emotional_wiring": h.psychology_philosophy.emotional_wiring,
+            "core_assumptions": h.psychology_philosophy.core_assumptions,
+        },
+        "physiology_pillar": {
+            "sleep_quality": h.physiology.sleep_quality,
+            "sleep_hours": h.physiology.sleep_hours,
+            "stress_level": h.physiology.stress_level,
+            "health_conditions": h.physiology.health_conditions,
+            "energy_patterns": h.physiology.energy_patterns,
+            "physical_constraints": h.physiology.physical_constraints,
+        },
+    }
+
+
+@api.get("/journey/notes/{user_id}")
+def get_clinician_notes(user_id: str):
+    """
+    Get the clinician's notes (AI observations).
+    Maintained separately from client history per Kerrio requirements.
+    """
+    profile = journey_manager.get_or_create_profile(user_id)
+    n = profile.clinician_notes
+
+    return {
+        "user_id": user_id,
+        "session_insights": [
+            {
+                "turn_id": i.turn_id,
+                "observation": i.observation,
+                "category": i.category,
+                "timestamp": i.timestamp,
+            }
+            for i in n.session_insights
+        ],
+        "emerging_patterns": n.emerging_patterns,
+        "diagnostic_hypotheses": n.diagnostic_hypotheses,
+        "blind_spots_identified": n.blind_spots_identified,
+        "ambiguities_to_clarify": n.ambiguities_to_clarify,
+    }
+
+
+# === Diagnosis and Treatment Endpoints ===
+
+@api.get("/journey/diagnosis/{user_id}")
+def get_diagnosis(user_id: str):
+    """
+    Generate or retrieve the diagnosis for a user.
+    This is the most important phase - explaining WHY the problem exists.
+    """
+    profile = journey_manager.get_or_create_profile(user_id)
+
+    # Generate diagnosis from collected history
+    diagnosis = diagnostic_engine.generate_diagnosis_from_history(
+        profile.client_history,
+        profile.clinician_notes,
+        profile.cognitive_wiring_map
+    )
+
+    # Store diagnosis in profile
+    profile.diagnosis = diagnosis
+    journey_manager.save_profile(user_id)
+
+    return {
+        "user_id": user_id,
+        "stage": profile.stage.value,
+        "diagnosis": {
+            "core_constraints": diagnosis.core_constraints,
+            "bottlenecks": diagnosis.bottlenecks,
+            "root_causes": diagnosis.root_causes,
+            "explanation": diagnosis.explanation,
+            "client_understood": diagnosis.client_understood,
+            "recommended_videos": [
+                {
+                    "video_id": v.video_id,
+                    "title": v.title,
+                    "relevance": v.relevance,
+                    "url": v.url
+                }
+                for v in diagnosis.recommended_videos
+            ]
+        }
+    }
+
+
+@api.post("/journey/diagnosis/confirm/{user_id}")
+def confirm_diagnosis_understood(user_id: str):
+    """
+    Client confirms they understand the diagnosis.
+    This is required before proceeding to treatment proposal.
+    'Understanding is a prerequisite for permanent change.'
+    """
+    profile = journey_manager.get_or_create_profile(user_id)
+    profile.diagnosis.client_understood = True
+    journey_manager.save_profile(user_id)
+
+    return {
+        "success": True,
+        "message": "Diagnosis understanding confirmed. Ready for treatment proposal.",
+        "can_advance": profile.can_advance_stage()
+    }
+
+
+@api.get("/journey/treatment/{user_id}")
+def get_treatment_proposal(user_id: str):
+    """
+    Get the treatment proposal including Cognitive Rewiring Map.
+    Only available after diagnosis is understood.
+    """
+    profile = journey_manager.get_or_create_profile(user_id)
+
+    if not profile.diagnosis.client_understood:
+        return {
+            "error": "Diagnosis must be understood before treatment proposal.",
+            "message": "Please confirm understanding of the diagnosis first."
+        }
+
+    # Extract goals from cognitive map or history
+    goals = []
+    for node in profile.cognitive_wiring_map.nodes:
+        if node.type == "goal":
+            goals.append(node.label)
+
+    # Generate rewiring map if not already done
+    if not profile.treatment_proposal.rewiring_map:
+        rewiring_map = rewiring_engine.generate_rewiring_map(
+            profile.diagnosis,
+            profile.cognitive_wiring_map,
+            goals
+        )
+        profile.treatment_proposal.rewiring_map = rewiring_map
+        journey_manager.save_profile(user_id)
+
+    rm = profile.treatment_proposal.rewiring_map
+    return {
+        "user_id": user_id,
+        "stage": profile.stage.value,
+        "treatment_proposal": {
+            "rewiring_map": {
+                "current_wiring": rm.current_wiring if rm else "",
+                "target_wiring": rm.target_wiring if rm else "",
+                "progress": rm.progress if rm else 0.0,
+                "steps": [
+                    {
+                        "id": s.id,
+                        "name": s.name,
+                        "description": s.description,
+                        "rationale": s.neuroscience_rationale,
+                        "completed": s.completed,
+                        "completed_at": s.completed_at
+                    }
+                    for s in (rm.rewiring_steps if rm else [])
+                ]
+            },
+            "interventions": [
+                {
+                    "id": i.id,
+                    "name": i.name,
+                    "description": i.description,
+                    "frequency": i.frequency,
+                    "progress": i.progress
+                }
+                for i in profile.treatment_proposal.interventions
+            ],
+            "client_accepted": profile.treatment_proposal.client_accepted
+        }
+    }
+
+
+@api.post("/journey/treatment/step/complete")
+def complete_rewiring_step(req: StepCompleteReq):
+    """Mark a specific rewiring step as complete."""
+    profile = journey_manager.get_or_create_profile(req.user_id)
+    if not profile.treatment_proposal.rewiring_map:
+        return {"success": False, "message": "No rewiring map found."}
+
+    rm = profile.treatment_proposal.rewiring_map
+    step_found = False
+    for s in rm.rewiring_steps:
+        if s.id == req.step_id:
+            s.completed = True
+            s.completed_at = datetime.now(timezone.utc).isoformat()
+            step_found = True
+            break
+
+    if step_found:
+        rm.update_progress()
+        journey_manager.save_profile(req.user_id)
+        return {
+            "success": True,
+            "progress": rm.progress,
+            "can_advance": profile.can_advance_stage()
+        }
+    return {"success": False, "message": "Step not found."}
+
+
+@api.post("/journey/monitoring/submit")
+def submit_monitoring(req: MonitoringReq):
+    """Submit monitoring feedback and trigger closed-loop logic."""
+    profile = journey_manager.get_or_create_profile(req.user_id)
+    should_rediagnose = journey_manager.submit_monitoring_feedback(
+        profile, req.metrics, req.notes
+    )
+
+    return {
+        "success": True,
+        "should_rediagnose": should_rediagnose,
+        "new_stage": profile.stage.value,
+        "message": "Diagnosis updated" if should_rediagnose else "Monitoring recorded"
+    }
+
+
+@api.post("/journey/treatment/accept/{user_id}")
+def accept_treatment(user_id: str):
+    """
+    Client accepts the treatment proposal.
+    This advances them to the active treatment phase.
+    """
+    profile = journey_manager.get_or_create_profile(user_id)
+    profile.treatment_proposal.client_accepted = True
+    journey_manager.save_profile(user_id)
+
+    return {
+        "success": True,
+        "message": "Treatment accepted. Beginning cognitive rewiring process.",
+        "can_advance": profile.can_advance_stage()
+    }
+
+
+@api.get("/journey/videos")
+def get_all_videos():
+    """
+    Get the complete video library for educational content.
+    Videos are assigned based on diagnosis.
+    """
+    return {
+        "videos": [
+            {
+                "id": video["id"],
+                "title": video["title"],
+                "topics": video["topics"],
+                "duration_minutes": video["duration_minutes"],
+                "description": video["description"]
+            }
+            for video in VIDEO_DATABASE.values()
+        ]
+    }
+
+
+@api.get("/journey/videos/{video_id}")
+def get_video_details(video_id: str):
+    """
+    Get details for a specific video.
+    """
+    for video in VIDEO_DATABASE.values():
+        if video["id"] == video_id:
+            return video
+    return {"error": f"Video {video_id} not found"}
+
+
+@api.post("/journey/treatment/progress/{user_id}")
+def update_treatment_progress(user_id: str, step_index: int = 0, completed: bool = True):
+    """
+    Update progress on treatment steps.
+    Used for monitoring and reassessment.
+    """
+    profile = journey_manager.get_or_create_profile(user_id)
+
+    if profile.treatment_proposal.rewiring_map:
+        total_steps = len(profile.treatment_proposal.rewiring_map.rewiring_steps)
+        if total_steps > 0:
+            completed_steps = min(step_index + 1 if completed else step_index, total_steps)
+            profile.treatment_proposal.rewiring_map.progress = completed_steps / total_steps
+
+    journey_manager.save_profile(user_id)
+
+    return {
+        "success": True,
+        "progress": profile.treatment_proposal.rewiring_map.progress if profile.treatment_proposal.rewiring_map else 0
+    }
+
+
+@api.get("/journey/full-profile/{user_id}")
+def get_full_profile(user_id: str):
+    """
+    Get the complete Kerrio profile for a user.
+    Includes all journey data: history, notes, diagnosis, treatment.
+    """
+    profile = journey_manager.get_or_create_profile(user_id)
+    h = profile.client_history
+    n = profile.clinician_notes
+    d = profile.diagnosis
+    t = profile.treatment_proposal
+
+    return {
+        "user_id": user_id,
+        "stage": profile.stage.value,
+        "registered_at": profile.registered_at,
+        "conversation_turns": len(profile.conversation_history),
+
+        "client_history": {
+            "history_pillar": {
+                "life_events": h.history.life_events,
+                "formative_experiences": h.history.formative_experiences,
+                "recurrent_patterns": h.history.recurrent_patterns,
+            },
+            "psychology_philosophy_pillar": {
+                "beliefs": h.psychology_philosophy.beliefs,
+                "values": h.psychology_philosophy.values,
+                "core_assumptions": h.psychology_philosophy.core_assumptions,
+            },
+            "physiology_pillar": {
+                "sleep_quality": h.physiology.sleep_quality,
+                "stress_level": h.physiology.stress_level,
+            }
+        },
+
+        "clinician_notes": {
+            "insights_count": len(n.session_insights),
+            "blind_spots": n.blind_spots_identified,
+            "patterns": n.emerging_patterns,
+        },
+
+        "diagnosis": {
+            "core_constraints": d.core_constraints,
+            "bottlenecks": d.bottlenecks,
+            "root_causes": d.root_causes,
+            "client_understood": d.client_understood,
+        },
+
+        "treatment": {
+            "accepted": t.client_accepted,
+            "progress": t.rewiring_map.progress if t.rewiring_map else 0,
+            "steps_count": len(t.rewiring_map.rewiring_steps) if t.rewiring_map else 0,
+        },
+
+        "cognitive_map": {
+            "nodes_count": len(profile.cognitive_wiring_map.nodes),
+            "edges_count": len(profile.cognitive_wiring_map.edges),
+        }
+    }
+
 
 @api.get("/map/{user_id}")
 def get_cognitive_map(user_id: str, max_turns: int = 20):

@@ -6,6 +6,7 @@
   "mi_tags": [
     "open_question",
     "reflection_simple",
+    "reflection_complex",
     "affirm",
     "summary",
     "provide_info",
@@ -14,12 +15,169 @@
   ],
   "state_before": {
     "goal": "increase_steps",
-    "barriers": [
-      "time"
-    ],
+    "barriers": ["time"],
     "week_steps_p50": 5400
   },
   "state_after": {
     "plan": "walk 15min Tue/Thu"
+  },
+
+  "_comment_kerrio_journey": "=== Kerrio.AI User Journey Schema (Mayo Clinic Model) ===",
+
+  "journey_stage": {
+    "type": "enum",
+    "values": [
+      "registration",
+      "history_collection",
+      "consultation",
+      "diagnosis",
+      "proposal",
+      "treatment",
+      "monitoring"
+    ],
+    "description": "Current stage in the Kerrio clinical journey"
+  },
+
+  "client_history": {
+    "_comment": "Raw data across three pillars - separated from clinician notes",
+    "history_pillar": {
+      "life_events": ["childhood trauma", "career change"],
+      "formative_experiences": ["strict upbringing", "early success"],
+      "recurrent_patterns": ["burnout despite success", "self-sabotage"]
+    },
+    "psychology_philosophy_pillar": {
+      "beliefs": ["self-worth tied to achievement"],
+      "values": ["family", "success", "health"],
+      "meaning_structures": ["purpose through work"],
+      "emotional_wiring": ["anxiety under pressure", "guilt about rest"]
+    },
+    "physiology_pillar": {
+      "sleep": {"quality": "poor", "hours": 5},
+      "stress_level": "high",
+      "health_conditions": ["hypertension"],
+      "energy_patterns": ["morning crash", "evening second wind"],
+      "constraints": ["chronic back pain"]
+    }
+  },
+
+  "clinician_notes": {
+    "_comment": "AI's clinical observations - maintained separately from client history",
+    "session_insights": [
+      {
+        "turn_id": 3,
+        "observation": "Client shows resistance when discussing work-life balance",
+        "category": "blind_spot"
+      }
+    ],
+    "emerging_patterns": ["perfectionism", "avoidance of vulnerability"],
+    "diagnostic_hypotheses": ["core assumption: worth = productivity"]
+  },
+
+  "cognitive_wiring_map": {
+    "_comment": "Full personalized brain model built during diagnosis",
+    "nodes": [
+      {
+        "id": "n1",
+        "label": "Belief: Self-worth tied to success metrics",
+        "type": "core_assumption",
+        "evidence_turns": [1, 3, 5],
+        "confidence": 0.85
+      },
+      {
+        "id": "n2",
+        "label": "Pattern: Persistent burnout despite achievement",
+        "type": "recurrent_pattern",
+        "evidence_turns": [2, 4],
+        "confidence": 0.9
+      }
+    ],
+    "edges": [
+      {
+        "source": "n1",
+        "target": "n2",
+        "type": "causes",
+        "evidence_turns": [3],
+        "weight": 0.8
+      }
+    ],
+    "node_types": [
+      "goal",
+      "value",
+      "emotion",
+      "barrier",
+      "behaviour",
+      "outcome",
+      "core_assumption",
+      "core_constraint",
+      "bottleneck",
+      "hidden_constraint",
+      "recurrent_pattern",
+      "belief",
+      "strength"
+    ],
+    "edge_types": [
+      "supports_goal",
+      "barrier_to",
+      "influences",
+      "leads_to",
+      "causes",
+      "maintains",
+      "conflicts_with",
+      "reinforces",
+      "related_to"
+    ]
+  },
+
+  "diagnosis": {
+    "_comment": "Diagnostic output explaining WHY problems exist",
+    "core_constraints": ["perfectionism limiting delegation"],
+    "bottlenecks": ["inability to rest without guilt"],
+    "root_causes": ["childhood messaging: love conditional on achievement"],
+    "explanation": "Your belief that self-worth depends on productivity creates a cycle where rest feels threatening...",
+    "recommended_videos": [
+      {
+        "video_id": "neuro_101",
+        "title": "Understanding Your Brain's Reward System",
+        "relevance": "Explains dopamine cycle in achievement addiction"
+      }
+    ]
+  },
+
+  "treatment_proposal": {
+    "_comment": "Personalized treatment plan grounded in diagnosis",
+    "interventions": [
+      {
+        "id": "int1",
+        "name": "Cognitive Rewiring Exercise",
+        "target_node": "n1",
+        "description": "Daily journaling to separate self-worth from productivity",
+        "frequency": "daily",
+        "duration_weeks": 4
+      }
+    ],
+    "cognitive_rewiring_map": {
+      "_comment": "Patent Pending - maps current wiring to target wiring",
+      "current_wiring": "achievement -> worth -> meaning",
+      "target_wiring": "being -> worth -> meaning (achievement optional)",
+      "rewiring_steps": ["step1", "step2", "step3"]
+    }
+  },
+
+  "monitoring": {
+    "_comment": "Longitudinal progress tracking",
+    "assessments": [
+      {
+        "date": "2024-01-15",
+        "metrics": {
+          "stress_level": 7,
+          "sleep_quality": 4,
+          "goal_progress": 0.3
+        },
+        "map_delta": "Barrier n3 reduced in strength"
+      }
+    ],
+    "map_evolution": {
+      "_comment": "Track how cognitive map changes over treatment"
+    }
   }
 }
