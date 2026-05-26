@@ -874,15 +874,32 @@
   <header>
     <div class="brand">Kerrio.AI</div>
     <div class="header-controls">
-      <div style="display:flex; align-items:center; gap:8px; font-size:0.85rem; color:var(--text-muted);">
-        <span>User ID:</span>
-        <input id="user-id" type="text" value="demo_user"
-          style="width:100px; padding:4px 8px; border:1px solid #e2e8f0; border-radius:4px;">
+      <div id="user-info" style="display:flex; align-items:center; gap:8px; font-size:0.85rem; color:var(--text-muted);">
+        <span id="user-email">—</span>
+        <button id="logout-btn" class="nav-btn" style="font-size:0.8rem;">Logout</button>
       </div>
+      <input id="user-id" type="hidden" value="">
       <button id="view-history-btn" class="nav-btn" title="View Chat History">📜 History</button>
       <button id="reset-btn" class="nav-btn">Reset</button>
     </div>
   </header>
+
+  <!-- Login overlay (covers everything until authenticated) -->
+  <div id="login-overlay" style="display:none; position:fixed; inset:0; background:var(--bg-app); z-index:9999; align-items:center; justify-content:center;">
+    <div style="background:var(--bg-panel); padding:2.5rem; border-radius:var(--radius-lg); box-shadow:var(--shadow-md); max-width:420px; width:90%;">
+      <div style="font-weight:800; font-size:1.5rem; background:linear-gradient(135deg, var(--primary), var(--secondary)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; margin-bottom:0.5rem;">Kerrio.AI</div>
+      <p style="color:var(--text-muted); margin:0 0 1.5rem 0;">Sign in to begin your cognitive optimization journey.</p>
+      <form id="login-form" style="display:flex; flex-direction:column; gap:0.75rem;">
+        <input id="login-email" type="email" required placeholder="you@example.com"
+          style="padding:10px 12px; border:1px solid var(--border); border-radius:var(--radius-sm); font-size:0.95rem;">
+        <button type="submit" id="login-submit"
+          style="padding:10px 12px; background:var(--primary); color:#fff; border:0; border-radius:var(--radius-sm); font-size:0.95rem; font-weight:600; cursor:pointer;">
+          Send magic link
+        </button>
+      </form>
+      <p id="login-status" style="margin:1rem 0 0 0; font-size:0.9rem; color:var(--text-muted); min-height:1.2em;"></p>
+    </div>
+  </div>
 
   <!-- Journey Progress -->
   <div class="journey-track" id="journey-bar">
@@ -1085,6 +1102,110 @@
 
     const apiBase = "https://rom-pickup-cancelled-literally.trycloudflare.com/api";
 
+    // === Auth / session management ===
+    const SESSION_KEY = "kerrio_session_token";
+    function getSessionToken() { return localStorage.getItem(SESSION_KEY); }
+    function setSessionToken(t) { localStorage.setItem(SESSION_KEY, t); }
+    function clearSessionToken() { localStorage.removeItem(SESSION_KEY); }
+
+    let currentUser = null;  // {email, user_id} once /auth/me succeeds
+
+    // Wrapper that all API calls go through. Injects Authorization header
+    // and triggers logout flow on 401.
+    async function apiFetch(path, opts = {}) {
+      const headers = new Headers(opts.headers || {});
+      const tok = getSessionToken();
+      if (tok) headers.set("Authorization", "Bearer " + tok);
+      const resp = await fetch(apiBase + path, { ...opts, headers });
+      if (resp.status === 401) {
+        clearSessionToken();
+        showLogin();
+        throw new Error("unauthenticated");
+      }
+      return resp;
+    }
+
+    function showLogin() {
+      document.getElementById("login-overlay").style.display = "flex";
+      document.getElementById("user-email").textContent = "—";
+    }
+    function hideLogin() {
+      document.getElementById("login-overlay").style.display = "none";
+    }
+
+    async function bootAuth() {
+      // 1) If URL has ?verify_token=..., exchange it for a session token.
+      const url = new URL(window.location.href);
+      const verifyToken = url.searchParams.get("verify_token");
+      if (verifyToken) {
+        try {
+          const r = await fetch(apiBase + "/auth/verify", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token: verifyToken }),
+          });
+          if (r.ok) {
+            const data = await r.json();
+            setSessionToken(data.session_token);
+          }
+        } catch (e) { /* fall through to /auth/me check */ }
+        // Strip token from URL whether or not it succeeded.
+        url.searchParams.delete("verify_token");
+        window.history.replaceState({}, "", url.pathname + (url.search ? url.search : "") + url.hash);
+      }
+
+      // 2) If we have a session token, verify it.
+      if (getSessionToken()) {
+        try {
+          const r = await apiFetch("/auth/me");
+          if (r.ok) {
+            currentUser = await r.json();
+            document.getElementById("user-email").textContent = currentUser.email;
+            document.getElementById("user-id").value = currentUser.user_id;
+            hideLogin();
+            return true;
+          }
+        } catch (e) { /* unauthenticated; fall through */ }
+      }
+      showLogin();
+      return false;
+    }
+
+    document.getElementById("login-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const email = document.getElementById("login-email").value.trim();
+      const status = document.getElementById("login-status");
+      const submit = document.getElementById("login-submit");
+      if (!email) return;
+      submit.disabled = true;
+      status.textContent = "Sending magic link…";
+      try {
+        const r = await fetch(apiBase + "/auth/request", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email }),
+        });
+        if (r.ok) {
+          status.textContent = "Check your inbox. The link expires in 15 minutes.";
+        } else {
+          const body = await r.json().catch(() => ({}));
+          status.textContent = "Failed: " + (body.detail || r.statusText);
+        }
+      } catch (err) {
+        status.textContent = "Network error: " + err.message;
+      } finally {
+        submit.disabled = false;
+      }
+    });
+
+    document.getElementById("logout-btn").addEventListener("click", async () => {
+      try { await apiFetch("/auth/logout", { method: "POST" }); } catch (e) {}
+      clearSessionToken();
+      currentUser = null;
+      window.location.reload();
+    });
+
+
     const userInput = document.getElementById("user-input");
     const userIdInput = document.getElementById("user-id");
     const chatLog = document.getElementById("chat-log");
@@ -1179,7 +1300,7 @@
     async function loadJourneyStatus() {
       const userId = userIdInput.value.trim() || "anon";
       try {
-        const resp = await fetch(`${apiBase}/journey/${userId}`);
+        const resp = await apiFetch(`/journey/${userId}`);
         const data = await resp.json();
         updateJourneyBar(data.current_stage, data.can_advance);
         return data;
@@ -1191,7 +1312,7 @@
     async function advanceStage() {
       const userId = userIdInput.value.trim() || "anon";
       try {
-        const resp = await fetch(`${apiBase}/journey/advance`, {
+        const resp = await apiFetch(`/journey/advance`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ user_id: userId }),
@@ -1239,7 +1360,7 @@
       statusEl.textContent = "Kerrio is thinking...";
 
       try {
-        const res = await fetch(`${apiBase}/chat`, {
+        const res = await apiFetch(`/chat`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ user_id: userId, history: [], user_msg: msg }),
@@ -1263,7 +1384,7 @@
       const userId = userIdInput.value.trim() || "anon";
       chatLog.innerHTML = "";
       statusEl.textContent = "Resetting...";
-      await fetch(`${apiBase}/reset`, {
+      await apiFetch(`/reset`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user_id: userId }),
@@ -1279,7 +1400,7 @@
       mapStatusEl.innerText = "Loading cognitive map...";
 
       try {
-        const resp = await fetch(`${apiBase}/cogmap`, {
+        const resp = await apiFetch(`/cogmap`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ user_id: userId }),
@@ -1502,7 +1623,7 @@
     async function loadPillarsData() {
       const userId = userIdInput.value.trim() || "anon";
       try {
-        const resp = await fetch(`${apiBase}/journey/history/${userId}`);
+        const resp = await apiFetch(`/journey/history/${userId}`);
         const data = await resp.json();
 
         // History pillar
@@ -1547,7 +1668,7 @@
     async function loadDiagnosisData() {
       const userId = userIdInput.value.trim() || "anon";
       try {
-        const resp = await fetch(`${apiBase}/journey/diagnosis/${userId}`);
+        const resp = await apiFetch(`/journey/diagnosis/${userId}`);
         const data = await resp.json();
         const diag = data.diagnosis;
 
@@ -1626,7 +1747,7 @@
     async function loadTreatmentData() {
       const userId = userIdInput.value.trim() || "anon";
       try {
-        const resp = await fetch(`${apiBase}/journey/treatment/${userId}`);
+        const resp = await apiFetch(`/journey/treatment/${userId}`);
         const data = await resp.json();
 
         if (data.error) {
@@ -1701,7 +1822,7 @@
     async function completeStep(stepId) {
       const userId = userIdInput.value.trim() || "anon";
       try {
-        const resp = await fetch(`${apiBase}/journey/treatment/step/complete`, {
+        const resp = await apiFetch(`/journey/treatment/step/complete`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ user_id: userId, step_id: stepId })
@@ -1739,7 +1860,7 @@
       statusEl.textContent = 'Submitting feedback...';
 
       try {
-        const resp = await fetch(`${apiBase}/journey/monitoring/submit`, {
+        const resp = await apiFetch(`/journey/monitoring/submit`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ user_id: userId, metrics, notes })
@@ -1791,7 +1912,7 @@
     async function loadMonitoringHistory() {
       const userId = userIdInput.value.trim() || "anon";
       try {
-        const resp = await fetch(`${apiBase}/journey/${userId}`);
+        const resp = await apiFetch(`/journey/${userId}`);
         const data = await resp.json();
 
         const historyList = document.getElementById('history-list');
@@ -1832,7 +1953,7 @@
     async function confirmDiagnosis() {
       const userId = userIdInput.value.trim() || "anon";
       try {
-        const resp = await fetch(`${apiBase}/journey/diagnosis/confirm/${userId}`, {
+        const resp = await apiFetch(`/journey/diagnosis/confirm/${userId}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' }
         });
@@ -1853,7 +1974,7 @@
     async function acceptTreatment() {
       const userId = userIdInput.value.trim() || "anon";
       try {
-        const resp = await fetch(`${apiBase}/journey/treatment/accept/${userId}`, {
+        const resp = await apiFetch(`/journey/treatment/accept/${userId}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' }
         });
@@ -1874,7 +1995,7 @@
     async function loadChatHistory() {
       const userId = userIdInput.value.trim() || "anon";
       try {
-        const resp = await fetch(`${apiBase}/journey/${userId}`);
+        const resp = await apiFetch(`/journey/${userId}`);
         const data = await resp.json();
         // Clear chat log first
         chatLog.innerHTML = '';
@@ -1898,6 +2019,13 @@
     acceptTreatmentBtn.onclick = acceptTreatment;
     document.getElementById('submit-monitoring-btn').onclick = submitMonitoring;
 
+    // Boot: verify auth first, gate the rest of the UI on success.
+    bootAuth().then((authed) => {
+      if (!authed) return;  // login overlay is up, user has to sign in
+      initAuthedApp();
+    });
+
+    function initAuthedApp() {
     // Load initial journey status and chat history
     loadJourneyStatus().then(() => {
       statusEl.textContent = `Ready. Stage: ${currentStage}`;
@@ -1913,6 +2041,7 @@
         else showPanel('pillars');
       }
     });
+    }  // end initAuthedApp
   </script>
 
   <!-- Tutorial Elements -->
@@ -1981,7 +2110,7 @@
       historyList.innerHTML = '<p style="text-align: center; color: var(--text-muted);">Loading...</p>';
 
       try {
-        const resp = await fetch(`${apiBase}/users/${userId}/history`);
+        const resp = await apiFetch(`/users/${userId}/history`);
         const data = await resp.json();
 
         if (data.error) {
@@ -2035,7 +2164,7 @@
       const userId = userIdInput.value.trim() || "demo_user";
 
       try {
-        const resp = await fetch(`${apiBase}/users/${userId}/history`);
+        const resp = await apiFetch(`/users/${userId}/history`);
         const data = await resp.json();
 
         // Create downloadable JSON file
@@ -2081,7 +2210,7 @@
       statusEl.textContent = "Resetting session...";
 
       try {
-        const resp = await fetch(`${apiBase}/reset?backup=${backup}`, {
+        const resp = await apiFetch(`/reset?backup=${backup}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ user_id: userId }),

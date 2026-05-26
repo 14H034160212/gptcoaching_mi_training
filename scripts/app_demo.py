@@ -27,11 +27,11 @@ from datetime import datetime, timezone
 from collections import defaultdict
 from pathlib import Path
 
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, Depends, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
 import torch.nn.functional as F
 from transformers import (
@@ -43,6 +43,7 @@ from transformers import (
 from typing import List, Dict, Any
 from pydantic import BaseModel
 
+from scripts.auth import AuthStore, send_magic_link_email
 from scripts.cogmap_utils import build_cognitive_map_from_session
 from scripts.kerrio_journey import (
     KerriJourneyManager,
@@ -83,8 +84,12 @@ MODEL_PATH = os.environ.get("MODEL_PATH", "").strip()
 CLASSIFIER_PATH = os.environ.get("CLASSIFIER_PATH", "").strip()
 HF_TOKEN = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_HUB_TOKEN")
 LOG_DIR = os.environ.get("LOG_DIR", "runs/chat_logs")
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "").strip()
+MAIL_FROM = os.environ.get("MAIL_FROM", "onboarding@resend.dev").strip()
+APP_URL = os.environ.get("APP_URL", "https://gptcoaching-mi-training.pages.dev").strip().rstrip("/")
 
 assert MODEL_PATH, "MODEL_PATH is empty. export MODEL_PATH=/abs/path/to/model or HF repo id"
+assert RESEND_API_KEY, "RESEND_API_KEY is empty. export RESEND_API_KEY=re_xxx for magic-link email"
 
 os.makedirs(LOG_DIR, exist_ok=True)
 
@@ -150,6 +155,20 @@ app = FastAPI(title="GPTCoach MI Demo")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 api = APIRouter()
+
+# ===== Auth =====
+auth_store = AuthStore()
+
+
+def get_current_user(authorization: Optional[str] = Header(default=None)) -> dict:
+    """Resolve `Authorization: Bearer <session_token>` to a user record."""
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Missing bearer token")
+    token = authorization.split(None, 1)[1].strip()
+    user = auth_store.get_session_user(token)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
+    return user
 
 # Server-side per-user memory (lives for the process lifetime)
 SESSIONS: Dict[str, List[dict]] = defaultdict(list)
@@ -415,6 +434,54 @@ def summarize_cogmap_for_prompt(cmap: dict, max_items: int = 4) -> str:
 
     return "\n".join(lines)
 
+# ===== Auth endpoints =====
+class AuthRequestReq(BaseModel):
+    email: EmailStr
+
+class AuthVerifyReq(BaseModel):
+    token: str
+
+
+@api.post("/auth/request")
+def auth_request(req: AuthRequestReq):
+    """Send a magic-link email. Always returns 200 so the endpoint doesn't
+    leak whether an email is registered."""
+    token = auth_store.issue_magic_token(req.email)
+    link = f"{APP_URL}/?verify_token={token}"
+    try:
+        send_magic_link_email(RESEND_API_KEY, MAIL_FROM, req.email, link)
+        print(f"[auth] magic link sent to {req.email}")
+    except Exception as e:
+        print(f"[auth] failed to send magic link to {req.email}: {e}")
+        raise HTTPException(status_code=502, detail="Email delivery failed")
+    return {"ok": True}
+
+
+@api.post("/auth/verify")
+def auth_verify(req: AuthVerifyReq):
+    """Exchange a magic-link token for a long-lived session token."""
+    user = auth_store.consume_magic_token(req.token)
+    if user is None:
+        raise HTTPException(status_code=400, detail="Invalid or expired magic link")
+    session_token = auth_store.issue_session(user["user_id"])
+    return {
+        "session_token": session_token,
+        "user": {"email": user["email"], "user_id": user["user_id"]},
+    }
+
+
+@api.get("/auth/me")
+def auth_me(current_user: dict = Depends(get_current_user)):
+    return {"email": current_user["email"], "user_id": current_user["user_id"]}
+
+
+@api.post("/auth/logout")
+def auth_logout(authorization: Optional[str] = Header(default=None)):
+    if authorization and authorization.lower().startswith("bearer "):
+        auth_store.revoke_session(authorization.split(None, 1)[1].strip())
+    return {"ok": True}
+
+
 # ===== Endpoints =====
 @api.get("/health")
 def health():
@@ -426,7 +493,8 @@ def health():
     }
 
 @api.post("/chat")
-def chat_endpoint(req: ChatRequest):
+def chat_endpoint(req: ChatRequest, current_user: dict = Depends(get_current_user)):
+    req.user_id = current_user["user_id"]
     try:
         # 0) Get or create Kerrio client profile for journey management
         kerrio_profile = journey_manager.get_or_create_profile(req.user_id)
@@ -518,11 +586,12 @@ def chat_endpoint(req: ChatRequest):
         return {"reply": f"(backend error: {e})"}
 
 @api.post("/cogmap")
-def cogmap_endpoint(req: CogMapReq):
+def cogmap_endpoint(req: CogMapReq, current_user: dict = Depends(get_current_user)):
     """
     Build / refresh the cognitive map for a given user_id based on the
     server-side session memory (SESSIONS[user_id]).
     """
+    req.user_id = current_user["user_id"]
     session = SESSIONS.get(req.user_id, [])
     # we only use user utterances + coach replies; structure already matches
     cm = build_cognitive_map_from_session(session)
@@ -551,7 +620,8 @@ def cogmap_endpoint(req: CogMapReq):
     return cm
 
 @api.post("/score")
-def score_endpoint(req: ChatRequest):
+def score_endpoint(req: ChatRequest, current_user: dict = Depends(get_current_user)):
+    req.user_id = current_user["user_id"]
     if not (cls_model and cls_tok):
         return {"labels": [], "probs": []}
     # Score the last coach reply (or user_msg as a fallback)
@@ -567,8 +637,9 @@ def score_endpoint(req: ChatRequest):
     return {"labels": labels, "probs": probs}
 
 @api.post("/reset")
-def reset_endpoint(req: ResetReq, backup: bool = False):
+def reset_endpoint(req: ResetReq, backup: bool = False, current_user: dict = Depends(get_current_user)):
     """Reset user session, optionally backup data"""
+    req.user_id = current_user["user_id"]
     import shutil
     
     if backup:
@@ -599,8 +670,9 @@ def reset_endpoint(req: ResetReq, backup: bool = False):
     }
 
 @api.get("/users/{user_id}/history")
-def get_user_history(user_id: str):
+def get_user_history(user_id: str, current_user: dict = Depends(get_current_user)):
     """Get complete conversation history for a user"""
+    user_id = current_user["user_id"]
     from dataclasses import asdict
     
     profile = journey_manager.get_profile(user_id)
@@ -646,11 +718,12 @@ def get_user_history(user_id: str):
 # === Kerrio Journey Management Endpoints ===
 
 @api.get("/journey/{user_id}")
-def get_journey_status(user_id: str):
+def get_journey_status(user_id: str, current_user: dict = Depends(get_current_user)):
     """
     Get the current Kerrio journey status for a user.
     Returns stage, progress, and what's needed to advance.
     """
+    user_id = current_user["user_id"]
     profile = journey_manager.get_or_create_profile(user_id)
 
     # Build stage requirements message
@@ -683,10 +756,11 @@ def get_journey_status(user_id: str):
 
 
 @api.post("/journey/validate")
-def validate_invite(req: ValidateInviteReq):
+def validate_invite(req: ValidateInviteReq, current_user: dict = Depends(get_current_user)):
     """
     Validate a user's invitation code to allow them to proceed.
     """
+    req.user_id = current_user["user_id"]
     profile = journey_manager.get_or_create_profile(req.user_id)
     if profile.validate_invite_code(req.invite_code):
         journey_manager.save_profile(req.user_id)
@@ -696,10 +770,11 @@ def validate_invite(req: ValidateInviteReq):
 
 
 @api.post("/journey/proposal/accept")
-def accept_proposal(req: AdvanceStageReq):
+def accept_proposal(req: AdvanceStageReq, current_user: dict = Depends(get_current_user)):
     """
     Client accepts the treatment proposal.
     """
+    req.user_id = current_user["user_id"]
     profile = journey_manager.get_or_create_profile(req.user_id)
     profile.treatment_proposal.client_accepted = True
     journey_manager.save_profile(req.user_id)
@@ -707,11 +782,12 @@ def accept_proposal(req: AdvanceStageReq):
 
 
 @api.post("/journey/advance")
-def advance_journey_stage(req: AdvanceStageReq):
+def advance_journey_stage(req: AdvanceStageReq, current_user: dict = Depends(get_current_user)):
     """
     Attempt to advance the user to the next journey stage.
     Returns success/failure and the new stage.
     """
+    req.user_id = current_user["user_id"]
     profile = journey_manager.get_or_create_profile(req.user_id)
     old_stage = profile.stage.value
 
@@ -733,11 +809,12 @@ def advance_journey_stage(req: AdvanceStageReq):
 
 
 @api.get("/journey/prompts/{user_id}")
-def get_stage_prompts(user_id: str):
+def get_stage_prompts(user_id: str, current_user: dict = Depends(get_current_user)):
     """
     Get suggested prompts/questions for the current journey stage.
     Useful for guiding the conversation.
     """
+    user_id = current_user["user_id"]
     profile = journey_manager.get_or_create_profile(user_id)
 
     if profile.stage == JourneyStage.HISTORY_COLLECTION:
@@ -788,11 +865,12 @@ def get_stage_prompts(user_id: str):
 
 
 @api.get("/journey/history/{user_id}")
-def get_client_history(user_id: str):
+def get_client_history(user_id: str, current_user: dict = Depends(get_current_user)):
     """
     Get the client's collected history (three pillars).
     Separate from clinician notes per Kerrio requirements.
     """
+    user_id = current_user["user_id"]
     profile = journey_manager.get_or_create_profile(user_id)
     h = profile.client_history
 
@@ -823,11 +901,12 @@ def get_client_history(user_id: str):
 
 
 @api.get("/journey/notes/{user_id}")
-def get_clinician_notes(user_id: str):
+def get_clinician_notes(user_id: str, current_user: dict = Depends(get_current_user)):
     """
     Get the clinician's notes (AI observations).
     Maintained separately from client history per Kerrio requirements.
     """
+    user_id = current_user["user_id"]
     profile = journey_manager.get_or_create_profile(user_id)
     n = profile.clinician_notes
 
@@ -852,11 +931,12 @@ def get_clinician_notes(user_id: str):
 # === Diagnosis and Treatment Endpoints ===
 
 @api.get("/journey/diagnosis/{user_id}")
-def get_diagnosis(user_id: str):
+def get_diagnosis(user_id: str, current_user: dict = Depends(get_current_user)):
     """
     Generate or retrieve the diagnosis for a user.
     This is the most important phase - explaining WHY the problem exists.
     """
+    user_id = current_user["user_id"]
     profile = journey_manager.get_or_create_profile(user_id)
 
     # Generate diagnosis from collected history
@@ -893,12 +973,13 @@ def get_diagnosis(user_id: str):
 
 
 @api.post("/journey/diagnosis/confirm/{user_id}")
-def confirm_diagnosis_understood(user_id: str):
+def confirm_diagnosis_understood(user_id: str, current_user: dict = Depends(get_current_user)):
     """
     Client confirms they understand the diagnosis.
     This is required before proceeding to treatment proposal.
     'Understanding is a prerequisite for permanent change.'
     """
+    user_id = current_user["user_id"]
     profile = journey_manager.get_or_create_profile(user_id)
     profile.diagnosis.client_understood = True
     journey_manager.save_profile(user_id)
@@ -911,11 +992,12 @@ def confirm_diagnosis_understood(user_id: str):
 
 
 @api.get("/journey/treatment/{user_id}")
-def get_treatment_proposal(user_id: str):
+def get_treatment_proposal(user_id: str, current_user: dict = Depends(get_current_user)):
     """
     Get the treatment proposal including Cognitive Rewiring Map.
     Only available after diagnosis is understood.
     """
+    user_id = current_user["user_id"]
     profile = journey_manager.get_or_create_profile(user_id)
 
     if not profile.diagnosis.client_understood:
@@ -977,8 +1059,9 @@ def get_treatment_proposal(user_id: str):
 
 
 @api.post("/journey/treatment/step/complete")
-def complete_rewiring_step(req: StepCompleteReq):
+def complete_rewiring_step(req: StepCompleteReq, current_user: dict = Depends(get_current_user)):
     """Mark a specific rewiring step as complete."""
+    req.user_id = current_user["user_id"]
     profile = journey_manager.get_or_create_profile(req.user_id)
     if not profile.treatment_proposal.rewiring_map:
         return {"success": False, "message": "No rewiring map found."}
@@ -1004,8 +1087,9 @@ def complete_rewiring_step(req: StepCompleteReq):
 
 
 @api.post("/journey/monitoring/submit")
-def submit_monitoring(req: MonitoringReq):
+def submit_monitoring(req: MonitoringReq, current_user: dict = Depends(get_current_user)):
     """Submit monitoring feedback and trigger closed-loop logic."""
+    req.user_id = current_user["user_id"]
     profile = journey_manager.get_or_create_profile(req.user_id)
     should_rediagnose = journey_manager.submit_monitoring_feedback(
         profile, req.metrics, req.notes
@@ -1020,11 +1104,12 @@ def submit_monitoring(req: MonitoringReq):
 
 
 @api.post("/journey/treatment/accept/{user_id}")
-def accept_treatment(user_id: str):
+def accept_treatment(user_id: str, current_user: dict = Depends(get_current_user)):
     """
     Client accepts the treatment proposal.
     This advances them to the active treatment phase.
     """
+    user_id = current_user["user_id"]
     profile = journey_manager.get_or_create_profile(user_id)
     profile.treatment_proposal.client_accepted = True
     journey_manager.save_profile(user_id)
@@ -1068,11 +1153,12 @@ def get_video_details(video_id: str):
 
 
 @api.post("/journey/treatment/progress/{user_id}")
-def update_treatment_progress(user_id: str, step_index: int = 0, completed: bool = True):
+def update_treatment_progress(user_id: str, step_index: int = 0, completed: bool = True, current_user: dict = Depends(get_current_user)):
     """
     Update progress on treatment steps.
     Used for monitoring and reassessment.
     """
+    user_id = current_user["user_id"]
     profile = journey_manager.get_or_create_profile(user_id)
 
     if profile.treatment_proposal.rewiring_map:
@@ -1090,11 +1176,12 @@ def update_treatment_progress(user_id: str, step_index: int = 0, completed: bool
 
 
 @api.get("/journey/full-profile/{user_id}")
-def get_full_profile(user_id: str):
+def get_full_profile(user_id: str, current_user: dict = Depends(get_current_user)):
     """
     Get the complete Kerrio profile for a user.
     Includes all journey data: history, notes, diagnosis, treatment.
     """
+    user_id = current_user["user_id"]
     profile = journey_manager.get_or_create_profile(user_id)
     h = profile.client_history
     n = profile.clinician_notes
@@ -1151,12 +1238,13 @@ def get_full_profile(user_id: str):
 
 
 @api.get("/map/{user_id}")
-def get_cognitive_map(user_id: str, max_turns: int = 20):
+def get_cognitive_map(user_id: str, max_turns: int = 20, current_user: dict = Depends(get_current_user)):
     """
     Generate a cognitive map JSON from the user's dialogue history.
     If the LLM returns no edges, auto-generate simple reasonable edges
     so the map is not empty and the UI will show connections.
     """
+    user_id = current_user["user_id"]
     try:
         turns = load_dialog_for_user(user_id, max_turns=max_turns)
         if not turns:
