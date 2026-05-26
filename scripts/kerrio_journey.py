@@ -417,12 +417,11 @@ class KerriJourneyManager:
         self.storage_dir.mkdir(parents=True, exist_ok=True)
         self._profiles: Dict[str, KerriClientProfile] = {}
 
-    def get_or_create_profile(self, user_id: str) -> KerriClientProfile:
-        """Get existing profile or create new one."""
+    def get_profile(self, user_id: str) -> Optional[KerriClientProfile]:
+        """Return existing profile (from memory or disk), or None if unknown."""
         if user_id in self._profiles:
             return self._profiles[user_id]
 
-        # Try to load from disk
         profile_path = self.storage_dir / f"{user_id}.json"
         if profile_path.exists():
             try:
@@ -433,8 +432,14 @@ class KerriJourneyManager:
                 return profile
             except Exception as e:
                 print(f"[warn] Failed to load profile {user_id}: {e}")
+        return None
 
-        # Create new profile
+    def get_or_create_profile(self, user_id: str) -> KerriClientProfile:
+        """Get existing profile or create new one."""
+        existing = self.get_profile(user_id)
+        if existing is not None:
+            return existing
+
         profile = KerriClientProfile(user_id=user_id)
         self._profiles[user_id] = profile
         self.save_profile(user_id)
