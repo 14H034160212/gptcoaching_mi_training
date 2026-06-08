@@ -1,0 +1,79 @@
+{
+  "state_and_transition": {
+    "state_estimator": {
+      "n": 666,
+      "accuracy": 0.6486,
+      "macro_f1": 0.5499,
+      "per_class_f1": {
+        "change": 0.428,
+        "sustain": 0.4387,
+        "neutral": 0.7829
+      },
+      "confusion": {
+        "sustain": {
+          "change": 21,
+          "sustain": 59,
+          "neutral": 20
+        },
+        "neutral": {
+          "change": 56,
+          "sustain": 75,
+          "neutral": 321
+        },
+        "change": {
+          "neutral": 27,
+          "sustain": 35,
+          "change": 52
+        }
+      }
+    },
+    "transition_model": {
+      "n_val": 563,
+      "prior": {
+        "acc": 0.6021,
+        "macro_f1": 0.2506
+      },
+      "momentum": {
+        "acc": 0.659,
+        "macro_f1": 0.4421
+      },
+      "world_model": {
+        "acc": 0.6714,
+        "macro_f1": 0.5606
+      },
+      "action_helps_f1_lift": 0.1185
+    }
+  },
+  "counterfactual_ranking": {
+    "min_support": 8,
+    "mean_spearman_planner_vs_empirical": 0.379,
+    "top1_agreement": "1/3",
+    "mean_offline_change_uplift": 0.127,
+    "per_state": {
+      "change": {
+        "planner_best": "negotiation",
+        "empirical_best": "open_question",
+        "spearman": 0.821,
+        "n_supported_actions": 5
+      },
+      "sustain": {
+        "planner_best": "negotiation",
+        "empirical_best": "advice",
+        "spearman": 0.316,
+        "n_supported_actions": 4
+      },
+      "neutral": {
+        "planner_best": "open_question",
+        "empirical_best": "open_question",
+        "spearman": 0.0,
+        "n_supported_actions": 7
+      }
+    }
+  },
+  "safety": {
+    "crisis_recall": "5/5",
+    "benign_false_positive_rate": "0/5",
+    "risky_coach_reply_recall": "2/2",
+    "escalation_message_present_on_all_crises": true
+  }
+}

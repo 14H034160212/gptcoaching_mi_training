@@ -175,9 +175,30 @@ StaticFiles mount, so a server restart deploys it on the tunnel URL):
 Deploy = restart `uvicorn scripts.app_demo:app` on port 8081 (live demo, ask first).
 If the Cloudflare Pages copy of index.html is used, also `git push` for Pages rebuild.
 
+## Action tagger + Eval suite (2026-06-08) — DONE ✅
+
+**Action tagger (learned).** `build_action_data.py` (therapist utterances → 9-class
+action, AnnoMI-derived) + generic `train_clf.py` → `runs/action_clf` (distilbert,
+val acc 0.67 / macro-F1 0.49). Wired into `counterfactual.tag_action`: uses the
+classifier when present, falls back to the rule-based `_tag_action_rule`.
+
+**Safety layer.** `scripts/world_model/safety.py` — high-recall crisis screen.
+`coach_feedback` now short-circuits to an escalation message (no MI tips) on a
+crisis hit, and flags risky counselor replies.
+
+**Eval suite** (`scripts/eval/`, run via `python -m scripts.eval.run_all` →
+`reports/world_model_eval.json`):
+- `eval_state_transition` — state estimator acc 0.65 / macro-F1 0.55;
+  transition model macro-F1 0.56 vs momentum 0.44 (**action helps +0.12**).
+- `eval_counterfactual_rank` — planner vs held-out empirical:
+  mean Spearman 0.38, top-1 agreement 1/3, **mean offline change uplift +0.13**.
+- `eval_safety` — crisis recall **5/5**, benign FP **0/5**, risky-reply recall 2/2.
+
+Note: `/api/counterfactual` lazy-imports `counterfactual` and Python caches it, so
+**the live server needs a restart** to pick up the learned tagger + safety layer.
+
 ## Next steps (not yet built)
 
-- Swap rule-based action tagger for the existing MI behaviour classifier.
 - Tier 3 / MI-JEPA only if we want learned latent dynamics (the dual-use `history`/`future_text`
   fields in `transitions.jsonl` are already there for it).
 - `scripts/eval/` proper eval harness (state-transition acc, counterfactual ranking, safety).

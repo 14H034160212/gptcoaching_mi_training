@@ -27,7 +27,43 @@ _NEGOTIATE = re.compile(r"\b(could we|would you be willing|can we agree|shall we
 _OPEN_Q = re.compile(r"^(what|how|why|tell me|describe|in what way)\b", re.I)
 
 
+@lru_cache(maxsize=1)
+def _load_action_clf(path="runs/action_clf"):
+    if not os.path.isdir(path):
+        return None
+    try:
+        import torch  # noqa: F401
+        from transformers import AutoTokenizer, AutoModelForSequenceClassification
+        tok = AutoTokenizer.from_pretrained(path)
+        mdl = AutoModelForSequenceClassification.from_pretrained(path)
+        mdl.eval()
+        return tok, mdl
+    except Exception as e:
+        print(f"[counterfactual] action clf load failed: {e}")
+        return None
+
+
 def tag_action(text: str) -> str:
+    """MI action tag for a counselor utterance (1 of ACTIONS).
+
+    Uses the trained action classifier (runs/action_clf) if present, else the
+    transparent rule-based fallback below.
+    """
+    clf = _load_action_clf()
+    if clf is not None:
+        import torch
+        tok, mdl = clf
+        enc = tok(text, return_tensors="pt", truncation=True, max_length=128)
+        enc.pop("token_type_ids", None)
+        with torch.no_grad():
+            pred = mdl(**enc).logits.argmax(-1).item()
+        lab = mdl.config.id2label[pred]
+        if lab in ACTIONS:
+            return lab
+    return _tag_action_rule(text)
+
+
+def _tag_action_rule(text: str) -> str:
     """Rule-based MI action tag for a counselor utterance (1 of ACTIONS)."""
     t = text.strip()
     low = t.lower()
@@ -101,10 +137,23 @@ def _model(data="data/world_model/transitions.jsonl"):
 
 def coach_feedback(client_msg: str, coach_reply: str, horizon=3, gamma=0.9, context=""):
     """Full counterfactual feedback for one (client_msg, coach_reply) pair."""
+    from scripts.world_model.safety import safety_screen
+    safety = safety_screen(client_msg, coach_reply)
+    if safety["crisis_detected"]:
+        # In a crisis, suppress MI coaching tips and escalate instead.
+        return {
+            "safety": safety,
+            "estimated_client_state": "crisis",
+            "your_action": tag_action(coach_reply),
+            "your_reply": coach_reply,
+            "escalation": safety["escalation"],
+            "ranked_actions": [],
+        }
     state = estimate_state(client_msg, context)
     action = tag_action(coach_reply)
     cf = P.counterfactual(_model(), state, action, horizon, gamma)
     return {
+        "safety": safety,
         "estimated_client_state": state,
         "your_action": action,
         "your_reply": coach_reply,
