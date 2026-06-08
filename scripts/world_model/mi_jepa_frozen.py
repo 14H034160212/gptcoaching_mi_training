@@ -20,8 +20,20 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from scripts.world_model.mi_jepa import load, train_linear_probe, macro_f1, TALKS
+from scripts.world_model.mi_jepa import load, train_linear_probe, macro_f1, TALKS, history_to_text
 from scripts.world_model.transition_model import ACTIONS
+
+ACT2ID = {a: i for i, a in enumerate(ACTIONS)}
+
+
+def load_extra(path):
+    """Unlabeled (context, action, future_text) pairs for predictor pretraining."""
+    rows = []
+    for line in open(path, encoding="utf-8"):
+        r = json.loads(line)
+        rows.append({"ctx": history_to_text(r["history"]),
+                     "tgt": r["future_text"], "action": ACT2ID[r["action"]]})
+    return rows
 
 
 def mean_pool(last_hidden, mask):
@@ -57,6 +69,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default="data/world_model/transitions.jsonl")
     ap.add_argument("--backbone", default="sentence-transformers/all-mpnet-base-v2")
+    ap.add_argument("--extra", default=None, help="extra unlabeled pairs jsonl for predictor pretraining")
     ap.add_argument("--steps", type=int, default=4000)
     ap.add_argument("--bs", type=int, default=128)
     ap.add_argument("--lr", type=float, default=1e-3)
@@ -84,11 +97,24 @@ def main():
     y_tr = [r["next_talk"] for r in train_rows]
     y_va = [r["next_talk"] for r in val_rows]
 
+    # predictor training set = AnnoMI-train (+ optional extra unlabeled corpus).
+    # The PROBE stays on AnnoMI only (Xc_tr/y_tr), so keep those separate.
+    Xc_fit, Xt_fit, a_fit = Xc_tr, Xt_tr, a_tr
+    if args.extra:
+        extra = load_extra(args.extra)
+        print(f"[jepa-frozen] + extra corpus: {len(extra)} pairs from {args.extra}")
+        Ec = embed([r["ctx"] for r in extra], tok, bert, dev, args.max_len)
+        Et = embed([r["tgt"] for r in extra], tok, bert, dev, args.tgt_len)
+        Ea = torch.tensor([r["action"] for r in extra])
+        Xc_fit = torch.cat([Xc_tr, Ec], 0)
+        Xt_fit = torch.cat([Xt_tr, Et], 0)
+        a_fit = torch.cat([a_tr, Ea], 0)
+
     # train predictor: context+action -> target embedding (cosine + mse)
     pred = Predictor(d, len(ACTIONS)).to(dev)
     opt = torch.optim.AdamW(pred.parameters(), lr=args.lr, weight_decay=1e-4)
-    Xc_tr_d, Xt_tr_d, a_tr_d = Xc_tr.to(dev), Xt_tr.to(dev), a_tr.to(dev)
-    n = len(train_rows)
+    Xc_tr_d, Xt_tr_d, a_tr_d = Xc_fit.to(dev), Xt_fit.to(dev), a_fit.to(dev)
+    n = len(Xc_fit)
     g = torch.Generator().manual_seed(0)
     for step in range(args.steps):
         idx = torch.randint(0, n, (args.bs,), generator=g)
@@ -117,14 +143,17 @@ def main():
     ctx = fit_eval(Xc_tr, Xc_va)
     report = {
         "backbone": args.backbone, "n_val": len(val_rows),
+        "predictor_train_size": int(n), "extra_corpus": args.extra,
         "target_probe (sees reply, upper bound)": {"acc": tgt[0], "macro_f1": tgt[1]},
         "jepa_dynamics_readout (predicted latents)": {"acc": dyn[0], "macro_f1": dyn[1]},
         "context_readout": {"acc": ctx[0], "macro_f1": ctx[1]},
         "distilbert_jepa_dynamics": {"acc": 0.4458, "macro_f1": 0.3815},
         "tabular_transition_baseline": {"acc": 0.6714, "macro_f1": 0.5606},
     }
-    json.dump(report, open("reports/mi_jepa_frozen_eval.json", "w"), indent=2)
+    out = "reports/mi_jepa_frozen_aug_eval.json" if args.extra else "reports/mi_jepa_frozen_eval.json"
+    json.dump(report, open(out, "w"), indent=2)
     print(json.dumps(report, indent=2))
+    print(f"[jepa-frozen] wrote -> {out}")
 
 
 if __name__ == "__main__":

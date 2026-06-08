@@ -250,6 +250,30 @@ self-supervised pretrain the predictor on a much larger corpus (e.g. tens of
 thousands of LLM-simulated MI turns) then probe AnnoMI. That's expensive (3B-model
 generation) and needs a go-decision; deferred.
 
+### Scaling lever #2 — more data (ESConv corpus + online active loop)
+
+Fetched **thu-coai/esconv** (1.3k multi-turn counseling dialogues). Two uses:
+
+**(a) Self-supervised predictor data for JEPA** (`build_esconv_pairs.py` → 14.4k
+(context, action, future_text) pairs; `mi_jepa_frozen.py --extra`):
+JEPA dynamics readout 0.395 → **0.408** F1 (18.5k predictor-train). Real but small
+gain; still << tabular 0.56. Confirms the predictor is data-hungry, but forecasting
+free-form next-utterance embeddings is intrinsically hard — more data helps slowly.
+
+**(b) Online active-learning loop** (the user's "synthesize-where-weak, retrain"
+idea — `silver_label_esconv.py` + `active_loop.py`, reports/active_loop.json):
+- silver-label REAL ESConv text with the talk-type classifier (real text + silver
+  label → avoids self-generation confirmation bias; labels are noisy since ESConv
+  is out-of-domain, top-quartile conf only 0.53 → rejection sampling needed).
+- each round: find weakest class on real AnnoMI-val → add high-conf silver triples
+  for it → refit → **KEEP only if real-val macro-F1 improves**, else raise conf bar.
+- Result: macro-F1 **0.5606 → 0.5686 (+0.008)**; round 1 (+400 'sustain') kept,
+  rounds 2-8 rejected by the gate. Modest lift, self-correcting, no degradation.
+- This is DAgger/STaR-flavored active learning. Honest framing: gain is small and
+  bounded by silver-label noise + domain gap; the value is the *mechanism* (real-val
+  reward gate that refuses harmful data), which scales to better labelers / in-domain
+  synthesis. Next: Qwen-generated in-domain MI rollouts as the synthesis source.
+
 ## Next steps (not yet built)
 
 - Tier 3 / MI-JEPA only if we want learned latent dynamics (the dual-use `history`/`future_text`
