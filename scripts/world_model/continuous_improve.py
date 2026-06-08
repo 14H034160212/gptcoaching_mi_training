@@ -40,6 +40,9 @@ def main():
     ap.add_argument("--conf", type=float, default=0.5)
     ap.add_argument("--budget", type=int, default=400)
     ap.add_argument("--skip-harvest", action="store_true")
+    ap.add_argument("--regen-synth", action="store_true",
+                    help="(weekly) regenerate in-domain synthetic data targeting the current weak class")
+    ap.add_argument("--synth-n", type=int, default=500)
     args = ap.parse_args()
 
     dw = "data/world_model"
@@ -48,10 +51,38 @@ def main():
         run("scripts.world_model.harvest_user_transitions", "--talk-clf", args.talk_clf,
             "--out", f"{dw}/user_transitions.jsonl")
 
+    # 1b) OPTIONAL (weekly): regenerate synthetic MI data targeting the CURRENT weak class,
+    #     then ACCUMULATE it (append) so the synthetic corpus grows over time.
+    synth_pool = f"{dw}/synth_accumulated.jsonl"
+    if args.regen_synth:
+        from scripts.world_model.transition_model import TransitionModel, TALKS
+        from scripts.eval.eval_state_transition import _macro_f1  # noqa: F401 (ensure import path ok)
+        from scripts.world_model.active_loop import eval_model, load_jsonl
+        cur = args.prod if os.path.exists(args.prod) else args.anno
+        wm = TransitionModel().fit([r for r in load_jsonl(cur) if r.get("split", "train") == "train"])
+        val = [r for r in load_jsonl(args.anno) if r["split"] == "val"]
+        rec = eval_model(wm, val)["per_class"]
+        # weakest of the two generatable stances (neutral is not a generation target)
+        weak = min(["sustain", "change"], key=lambda c: rec[c]["recall"])
+        sustain_frac = 0.85 if weak == "sustain" else 0.15
+        print(f"[continuous] regen-synth: current weak class = {weak} -> sustain_frac={sustain_frac}")
+        new_synth = f"{dw}/synth_new.jsonl"
+        run("scripts.world_model.gen_synth_mi", "--talk-clf", args.talk_clf,
+            "--n", str(args.synth_n), "--sustain-frac", str(sustain_frac), "--out", new_synth)
+        # accumulate (append) so the synthetic corpus grows
+        with open(synth_pool, "a", encoding="utf-8") as out:
+            for line in open(new_synth, encoding="utf-8"):
+                out.write(line)
+        print(f"[continuous] appended new synth -> {synth_pool} (total {sum(1 for _ in open(synth_pool))})")
+    elif not os.path.exists(synth_pool) and os.path.exists(f"{dw}/synth_silver_v2.jsonl"):
+        # seed the accumulating pool from the existing v2 synth on first run
+        import shutil
+        shutil.copy(f"{dw}/synth_silver_v2.jsonl", synth_pool)
+
     # 2) pool all silver augmentation sources that exist
     pool = f"{dw}/continuous_pool.jsonl"
     sources = [f"{dw}/user_transitions.jsonl", f"{dw}/esconv_silver_mpnet.jsonl",
-               f"{dw}/synth_silver_v2.jsonl"]
+               synth_pool]
     n = 0
     with open(pool, "w", encoding="utf-8") as out:
         for s in sources:
