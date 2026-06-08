@@ -1,0 +1,8 @@
+{
+  "production_model": "tabular (transitions_prod.jsonl)",
+  "tabular_baseline_f1": 0.5606,
+  "tabular_augmented_f1": 0.5837,
+  "jepa_challenger_f1": 0.4078,
+  "current_best": "tabular(+aug)",
+  "note": "MI-JEPA still below tabular -> tabular stays in production."
+}

@@ -135,9 +135,23 @@ def estimate_state(client_text: str, context: str = "") -> str:
 
 
 # --------------------------- feedback assembly ---------------------------
-@lru_cache(maxsize=1)
-def _model(data="data/world_model/transitions.jsonl"):
-    return TransitionModel.from_jsonl(data, split="train")
+_MODEL_CACHE = {"path": None, "mtime": None, "model": None}
+
+
+def _model():
+    """Production transition model. Prefers the loop-augmented dataset if present,
+    else the AnnoMI-only one. Hot-reloads when the file changes (mtime) so the
+    continuous-improvement pipeline can swap in a better model with no restart."""
+    prod = "data/world_model/transitions_prod.jsonl"
+    base = "data/world_model/transitions.jsonl"
+    path = prod if os.path.exists(prod) else base
+    mtime = os.path.getmtime(path)
+    if _MODEL_CACHE["path"] != path or _MODEL_CACHE["mtime"] != mtime:
+        # transitions_prod rows are all split="train"; AnnoMI file filters to train.
+        _MODEL_CACHE.update({"path": path, "mtime": mtime,
+                             "model": TransitionModel.from_jsonl(path, split="train")})
+        print(f"[counterfactual] loaded transition model from {path} (mtime {int(mtime)})")
+    return _MODEL_CACHE["model"]
 
 
 def coach_feedback(client_msg: str, coach_reply: str, horizon=3, gamma=0.9, context=""):

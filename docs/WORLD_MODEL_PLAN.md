@@ -313,6 +313,29 @@ Applied (1) and (2) directly:
 class) are what move the online loop — together they ~tripled the gain, and it is
 interpretable (the weak class improved, gated on real data).
 
+## Production deployment + continuous-improvement flywheel (2026-06-08)
+
+**Best model is live.** `counterfactual._model()` now prefers
+`data/world_model/transitions_prod.jsonl` (the loop-augmented tabular model,
+macro-F1 0.58) over the AnnoMI-only one, with **mtime-based hot-reload** — future
+retrains swap in with NO server restart. Live server confirmed loading it.
+
+**The flywheel** (`scripts/world_model/continuous_improve.py`, runnable on a schedule):
+1. `harvest_user_transitions.py` — turn real chat-log traffic into silver-labeled transitions.
+2. pool harvested-user + ESConv-silver + Qwen-synth.
+3. `active_loop.py --export-train` — real-val-gated improve → export winner to `transitions_prod.jsonl` (hot-reloaded).
+4. **model-agnostic gate** — also score MI-JEPA on the same real AnnoMI-val; promote whichever wins. Currently tabular 0.58 > JEPA 0.41 → tabular stays; when the data flywheel pushes JEPA past tabular, it gets flagged for promotion.
+
+**INTEGRITY RULE (enforced):** the gate is ALWAYS real gold AnnoMI-val; user/silver
+data only enters the *training* pool, never the judge → the flywheel cannot drift.
+
+**On "RL / Tier-3 will ultimately be best" (correct asymptotically):** tabular+MPC is
+already model-based RL with a tabular world model; swapping in the JEPA neural world
+model = full RL. JEPA loses now only on data scale (4k). The continuous flywheel is the
+mechanism that pushes data past the crossover, and the model-agnostic gate auto-promotes
+JEPA when it wins — no manual bet, data decides. (Wiring a JEPA-backed `predict_dist`
+into the MPC planner is the follow-up for when that crossover happens.)
+
 ## Next steps (not yet built)
 
 - Tier 3 / MI-JEPA only if we want learned latent dynamics (the dual-use `history`/`future_text`

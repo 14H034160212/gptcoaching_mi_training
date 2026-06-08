@@ -57,6 +57,8 @@ def main():
     ap.add_argument("--conf", type=float, default=0.8)
     ap.add_argument("--budget", type=int, default=400, help="max silver triples added per round")
     ap.add_argument("--report", default="reports/active_loop.json")
+    ap.add_argument("--export-train", default=None,
+                    help="if set, write the final kept-augmented training set here for production")
     args = ap.parse_args()
 
     anno = load_jsonl(args.anno)
@@ -112,6 +114,13 @@ def main():
                             "per_class": history[-1]["per_class"]})
 
     final = eval_model(wm, val)
+    if args.export_train:
+        from pathlib import Path as _P
+        _P(args.export_train).parent.mkdir(parents=True, exist_ok=True)
+        with open(args.export_train, "w", encoding="utf-8") as f:
+            for r in cur_train:
+                f.write(json.dumps(r, ensure_ascii=False) + "\n")
+        print(f"[loop] exported {len(cur_train)} augmented training rows -> {args.export_train}")
     report = {"baseline": base, "final": final,
               "delta_macro_f1": round(final["macro_f1"] - base["macro_f1"], 4),
               "total_silver_added": len(used), "history": history}
