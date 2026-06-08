@@ -32,8 +32,10 @@ BEHAVIORS = ["drinking", "smoking", "exercising regularly", "eating healthier",
 CLIENT_SYS = {
     "change": "You are roleplaying a therapy CLIENT who is becoming motivated to change. "
               "Express desire, ability, reasons, or need to change. Reply in ONE short sentence, first person.",
-    "sustain": "You are roleplaying a therapy CLIENT who is ambivalent/resistant. "
-               "Express reasons to stay the same, doubt, or that change is too hard. Reply in ONE short sentence, first person.",
+    "sustain": "You are roleplaying a therapy CLIENT who does NOT want to change and defends the "
+               "status quo. Voice clear reasons to keep things exactly as they are, downplay the "
+               "problem, or insist change is not worth it or too hard. Do NOT agree to change or "
+               "show willingness. ONE short first-person sentence.",
 }
 COACH_SYS = ("You are a motivational interviewing coach. Respond to the client with ONE short, "
              "MI-consistent turn (reflection, open question, affirmation, or asking permission). Do not lecture.")
@@ -61,6 +63,8 @@ def main():
     ap.add_argument("--out", default="data/world_model/synth_silver_transitions.jsonl")
     ap.add_argument("--n", type=int, default=600)
     ap.add_argument("--bs", type=int, default=40)
+    ap.add_argument("--sustain-frac", type=float, default=0.5,
+                    help="fraction of exchanges targeting sustain talk (rest=change)")
     args = ap.parse_args()
 
     from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModelForSequenceClassification
@@ -86,8 +90,11 @@ def main():
         return [mdl.config.id2label[i.item()] for i in idx], conf.tolist()
 
     records = []
-    import itertools
-    stances = list(itertools.islice(itertools.cycle(["sustain", "change"]), args.n))
+    n_sus = int(round(args.n * args.sustain_frac))
+    stances = ["sustain"] * n_sus + ["change"] * (args.n - n_sus)
+    # interleave so batches are mixed
+    import random
+    random.Random(0).shuffle(stances)
     for s in range(0, args.n, args.bs):
         batch_st = stances[s:s + args.bs]
         beh = [BEHAVIORS[(s + i) % len(BEHAVIORS)] for i in range(len(batch_st))]
@@ -102,7 +109,8 @@ def main():
         coaches = gen(model, tok, co_prompts, 64, temp=0.7)
         # 3) client follow-up (lean target stance)
         fu_prompts = [[{"role": "system", "content": CLIENT_SYS[st]},
-                       {"role": "user", "content": f"Counselor said: {c}\nRespond as the client."}]
+                       {"role": "user", "content": f"Your counselor responds: \"{c}\"\n"
+                                                    f"Reply in one short first-person sentence. Do not repeat the counselor."}]
                       for st, c in zip(batch_st, coaches)]
         followups = gen(model, tok, fu_prompts, 48)
 
@@ -111,6 +119,9 @@ def main():
         next_lab, next_conf = classify(tmdl, ttok, followups, ctxs=coaches)
         act_lab, _ = classify(amdl, atok, coaches)
         for i in range(len(batch_st)):
+            fu, op = followups[i].strip(), openings[i].strip()
+            if (fu.lower().startswith(("counselor", "your counselor")) or len(fu) < 5 or len(op) < 5):
+                continue  # drop prompt-leak / empty artifacts inline
             records.append({
                 "prev_talk": prev_lab[i], "action": act_lab[i], "next_talk": next_lab[i],
                 "conf": round(min(prev_conf[i], next_conf[i]), 4),

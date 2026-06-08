@@ -90,7 +90,12 @@ def _tag_action_rule(text: str) -> str:
 
 # --------------------------- state estimator ---------------------------
 @lru_cache(maxsize=1)
-def _load_talktype_clf(path="runs/talktype_clf"):
+def _load_talktype_clf(path=None):
+    # Prefer the stronger mpnet labeler (macro-F1 0.59, sustain F1 0.52) if present,
+    # else the distilbert one (0.55), else fall back to the keyword heuristic.
+    if path is None:
+        path = next((p for p in ("runs/talktype_clf_mpnet", "runs/talktype_clf")
+                     if os.path.isdir(p)), "runs/talktype_clf")
     if not os.path.isdir(path):
         return None
     try:

@@ -293,6 +293,26 @@ the needle: (1) target generation hard at the weak class (sustain), (2) improve 
 loop, (3) human-verify a small high-value slice instead of pure silver. The real-val
 gate worked perfectly throughout — it never let a non-improving batch through.
 
+### Scaling lever #4 — act on the lesson: better labeler + sustain-targeted (the win)
+
+Applied (1) and (2) directly:
+- **Better labeler:** retrained the talk-type classifier on **all-mpnet-base-v2**
+  (`train_talktype_clf.py --model sentence-transformers/all-mpnet-base-v2`) →
+  macro-F1 **0.55 → 0.59**, **sustain F1 0.44 → 0.52**, acc 0.70. Now also the
+  production state estimator (`counterfactual.py` prefers `runs/talktype_clf_mpnet`).
+- **Sustain-targeted synthesis** (`gen_synth_mi.py --sustain-frac 0.8`, stronger
+  client prompt) → 288 sustain synth (was 160); re-silver-labeled ESConv with the
+  mpnet labeler (5.7k sustain, was 4.7k).
+- Online loop on the combined pool (`reports/active_loop_v2.json`):
+  macro-F1 **0.5606 → 0.5837 (+0.0231, ~3× the prior +0.008)**. The gain is entirely
+  in the targeted weak class: **sustain recall 0.26 → 0.44, F1 0.36 → 0.45** (small
+  trade-off on change/neutral). Round 1's 400 high-conf sustain triples kept; rest
+  rejected by the real-val gate.
+
+**Confirmed:** the two predicted levers (cleaner labels + target the actual weak
+class) are what move the online loop — together they ~tripled the gain, and it is
+interpretable (the weak class improved, gated on real data).
+
 ## Next steps (not yet built)
 
 - Tier 3 / MI-JEPA only if we want learned latent dynamics (the dual-use `history`/`future_text`

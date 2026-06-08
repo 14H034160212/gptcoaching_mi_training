@@ -10,6 +10,7 @@ This repo scaffolds **data preparation + SFT + DPO** training for a multi-turn *
 - `scripts/infer_demo.py` — Run inference with memory + MI persona prompt.
 - `scripts/metrics_mi.py` — Simple MI-style behavioral metrics (coverage of open-question/reflect/affirm, etc.).
 - `configs/*.yaml` — Example hyper-parameters.
+- `scripts/world_model/` + `scripts/eval/` — **World-model layer**: latent client-state tracking, MI-action transition model, MPC counterfactual feedback, MI-JEPA latent dynamics, safety screen, and an online active-learning loop (see *World Model* section below).
 
 > ⚠️ You must provide your own dataset paths for MI-TAGS / AnnoMI etc. The included `example_mi_dialogs.jsonl` is **just for smoke tests** (not for real training).
 
@@ -297,6 +298,85 @@ python scripts/kerrio_journey.py
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+## World Model — Counterfactual MI Policy Evaluator
+
+A **world-model layer on top of** the SFT/DPO coach. The DPO model is a *reflex
+policy* (context → next utterance); the world model adds *deliberation*: it
+estimates the client's latent state, predicts how each MI intervention shifts
+the client's motivation, and gives **counterfactual feedback** for training
+human counselors. Every component is **anchored to AnnoMI ground-truth labels**
+(`client_talk_type`, `main_therapist_behaviour`, `mi_quality`) so it is
+*validatable*, not LLM self-consistency.
+
+### The MDP
+- **state** = `ClientLatentState` — observable: talk-type ∈ {change, sustain, neutral} (AnnoMI gold); latent: readiness/resistance/alliance (LLM-estimated).
+- **action** = 9 MI tactics (open/closed question, simple/complex reflection, information, advice, negotiation, options, other).
+- **reward** = change-talk evoked (+1) − sustain-talk (−1), + MI quality + safety.
+
+### Three tiers
+| Tier | What | Key result (held-out AnnoMI) |
+|---|---|---|
+| **1. Tabular transition** | count-based `P(next_talk \| prev_talk, action)` | macro-F1 **0.56** vs momentum 0.44 — *actions predict talk-type shifts* |
+| **2. MPC planner** | finite-horizon value lookahead over MI actions (PlaNet/TD-MPC style) → counterfactual ranking | per-action change-talk uplift matches MI theory (negotiation/open-Q evoke; advice/closed-Q suppress) |
+| **3. MI-JEPA** | action-conditioned V-JEPA-2-AC (EMA target + VICReg), self-supervised latent dynamics | dynamics readout F1 0.41 — honest: **below tabular** at 4k scale; representation matches but predictor is data-bound |
+
+### Supporting components
+- **State estimator** — talk-type classifier (mpnet, macro-F1 **0.59**, sustain F1 0.52).
+- **Action tagger** — 9-class MI action classifier (+ rule fallback).
+- **Safety layer** — high-recall crisis screen; escalates instead of coaching (recall 5/5, FP 0/5).
+- **Eval suite** (`scripts/eval/`) — state-transition, counterfactual-ranking, safety → `reports/world_model_eval.json`.
+- **Online active loop** — the "synthesize-where-weak, retrain, gate on real val" idea (DAgger/STaR-style): silver-label real ESConv / Qwen-self-play data, target the weakest class, **keep only if real AnnoMI-val improves**. Self-correcting (+0.008 macro-F1; the gate rejects all non-improving data).
+
+### Pipeline
+```
+                 client message ──► State estimator (talk-type clf)  ──┐
+counselor reply ──► Action tagger (MI action clf / rules)             │
+                                                                       ▼
+                                            Tier-1 Transition model  P(next_talk|state,action)
+                                                                       │
+                                            Tier-2 MPC planner ◄───────┘  (+ Tier-3 MI-JEPA latent dynamics, research)
+                                                                       │
+                          Safety screen ──► /api/counterfactual ──► World Model Panel (web)
+                                            "you used X → P(change)=.. ; better: Y → +uplift"
+
+        Online loop:  eval on real AnnoMI-val ─► find weakest class ─► synth/mine + silver-label
+                      ─► add ─► refit ─► KEEP iff real-val improves  (reward = held-out real F1)
+```
+
+### World Model files & commands
+```bash
+# Tier 1: build transition data + tabular model
+python scripts/world_model/build_transition_data.py
+python scripts/world_model/transition_matrix.py
+
+# State estimator + action tagger (talk-type / MI action classifiers)
+python scripts/world_model/build_talktype_data.py --context
+python scripts/world_model/train_talktype_clf.py --model sentence-transformers/all-mpnet-base-v2 --out runs/talktype_clf_mpnet
+python scripts/world_model/build_action_data.py
+python scripts/world_model/train_clf.py --train data/world_model/action_train.jsonl --val data/world_model/action_val.jsonl --out runs/action_clf
+
+# Tier 2: MPC counterfactual
+python -m scripts.world_model.planner --state neutral --actual-action closed_question
+python -m scripts.world_model.counterfactual --client "..." --coach "..."
+
+# Tier 3: MI-JEPA (action-conditioned latent dynamics) + frozen-encoder / data-scale variants
+python -m scripts.world_model.mi_jepa --epochs 8
+python -m scripts.world_model.mi_jepa_frozen --extra data/world_model/esconv_pairs.jsonl
+
+# Eval suite
+python -m scripts.eval.run_all      # -> reports/world_model_eval.json
+
+# Online active-learning loop (data lever)
+python -m scripts.world_model.build_esconv_pairs
+python -m scripts.world_model.silver_label_esconv --clf runs/talktype_clf_mpnet
+python -m scripts.world_model.gen_synth_mi --sustain-frac 0.8 --talk-clf runs/talktype_clf_mpnet
+python -m scripts.world_model.active_loop --silver data/world_model/combined_silver.jsonl --conf 0.55
+```
+
+API: `POST /api/counterfactual` `{client_msg, coach_reply}` → estimated state, your
+action vs model-optimal action, predicted change/sustain shift, ranked alternatives.
+UI: the **World Model** tab in the web demo. Full design & results in
+[`docs/WORLD_MODEL_PLAN.md`](docs/WORLD_MODEL_PLAN.md).
 
 <!-- ---
 ## Model-based MITI/MISC Scoring
