@@ -2,28 +2,28 @@
   "state_and_transition": {
     "state_estimator": {
       "n": 666,
-      "accuracy": 0.6486,
-      "macro_f1": 0.5499,
+      "accuracy": 0.6997,
+      "macro_f1": 0.5924,
       "per_class_f1": {
-        "change": 0.428,
-        "sustain": 0.4387,
-        "neutral": 0.7829
+        "change": 0.436,
+        "sustain": 0.5185,
+        "neutral": 0.8226
       },
       "confusion": {
         "sustain": {
-          "change": 21,
-          "sustain": 59,
-          "neutral": 20
+          "sustain": 70,
+          "neutral": 16,
+          "change": 14
         },
         "neutral": {
-          "change": 56,
-          "sustain": 75,
-          "neutral": 321
+          "sustain": 65,
+          "neutral": 350,
+          "change": 37
         },
         "change": {
-          "neutral": 27,
+          "change": 46,
           "sustain": 35,
-          "change": 52
+          "neutral": 33
         }
       }
     },
@@ -69,6 +69,18 @@
         "n_supported_actions": 7
       }
     }
+  },
+  "quality": {
+    "mi_consistency_of_recommendations": 1.0,
+    "recommended_top_action_by_state": {
+      "change": "negotiation",
+      "neutral": "negotiation",
+      "sustain": "negotiation"
+    },
+    "brier_score (lower better)": 0.4694,
+    "clinical_validity_change_gap (evoking - directive, >0 good)": 0.093,
+    "mean_Pchange_evoking": 0.297,
+    "mean_Pchange_directive": 0.204
   },
   "safety": {
     "crisis_recall": "5/5",

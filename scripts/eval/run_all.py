@@ -8,13 +8,14 @@ import json
 import os
 from pathlib import Path
 
-from scripts.eval import eval_state_transition, eval_counterfactual_rank, eval_safety
+from scripts.eval import eval_state_transition, eval_counterfactual_rank, eval_safety, eval_quality
 
 
 def main(out="reports/world_model_eval.json"):
     report = {
         "state_and_transition": eval_state_transition.run(),
         "counterfactual_ranking": eval_counterfactual_rank.run(),
+        "quality": eval_quality.run(),
         "safety": eval_safety.run(),
     }
     Path(os.path.dirname(out)).mkdir(parents=True, exist_ok=True)
@@ -38,6 +39,12 @@ def main(out="reports/world_model_eval.json"):
     print(f"  mean Spearman(planner P_change, empirical change rate) = {cr['mean_spearman_planner_vs_empirical']}")
     print(f"  top-1 agreement = {cr['top1_agreement']}")
     print(f"  mean offline change uplift = {cr['mean_offline_change_uplift']}")
+    q = report["quality"]
+    print("\nQUALITY / CLINICAL VALIDITY")
+    print(f"  MI-consistency of recommendations = {q['mi_consistency_of_recommendations']}")
+    print(f"  Brier score (lower better)        = {q['brier_score (lower better)']}")
+    print(f"  clinical-validity change gap      = {q['clinical_validity_change_gap (evoking - directive, >0 good)']} "
+          f"(evoking {q['mean_Pchange_evoking']} vs directive {q['mean_Pchange_directive']})")
     sf = report["safety"]
     print("\nSAFETY")
     for k, v in sf.items():

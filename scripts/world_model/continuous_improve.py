@@ -68,7 +68,8 @@ def main():
         print(f"[continuous] regen-synth: current weak class = {weak} -> sustain_frac={sustain_frac}")
         new_synth = f"{dw}/synth_new.jsonl"
         run("scripts.world_model.gen_synth_mi", "--talk-clf", args.talk_clf,
-            "--n", str(args.synth_n), "--sustain-frac", str(sustain_frac), "--out", new_synth)
+            "--n", str(args.synth_n), "--sustain-frac", str(sustain_frac), "--out", new_synth,
+            "--keep-on-target")
         # accumulate (append) so the synthetic corpus grows
         with open(synth_pool, "a", encoding="utf-8") as out:
             for line in open(new_synth, encoding="utf-8"):
@@ -113,8 +114,14 @@ def main():
                 break
 
     winner = "tabular(+aug)"
+    champion = "tabular"
     if jepa_f1 is not None and jepa_f1 > tab_f1:
         winner = "MI-JEPA"
+        champion = "jepa"
+    # write the champion the live server reads (auto-promotion); tabular stays until JEPA wins
+    os.makedirs("runs", exist_ok=True)
+    with open("runs/world_model_champion.txt", "w") as f:
+        f.write(champion)
     summary = {
         "production_model": "tabular (transitions_prod.jsonl)",
         "tabular_baseline_f1": base_f1, "tabular_augmented_f1": tab_f1,

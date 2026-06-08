@@ -135,22 +135,35 @@ def estimate_state(client_text: str, context: str = "") -> str:
 
 
 # --------------------------- feedback assembly ---------------------------
-_MODEL_CACHE = {"path": None, "mtime": None, "model": None}
+_MODEL_CACHE = {"key": None, "model": None}
+
+
+def _champion():
+    p = "runs/world_model_champion.txt"
+    return open(p).read().strip() if os.path.exists(p) else "tabular"
 
 
 def _model():
-    """Production transition model. Prefers the loop-augmented dataset if present,
-    else the AnnoMI-only one. Hot-reloads when the file changes (mtime) so the
-    continuous-improvement pipeline can swap in a better model with no restart."""
+    """Production transition model, chosen by the real-val gate (champion file).
+
+    - champion == "jepa": serve the JEPA-backed transition model (Tier 3 wins).
+    - else: serve the tabular model, preferring the loop-augmented dataset.
+    Hot-reloads on file change (mtime / champion) so the continuous pipeline can
+    swap models in with NO server restart."""
+    champ = _champion()
+    if champ == "jepa" and os.path.isdir("runs/mi_jepa"):
+        key = ("jepa", os.path.getmtime("runs/mi_jepa/mi_jepa.pt"))
+        if _MODEL_CACHE["key"] != key:
+            from scripts.world_model.jepa_transition import JepaTransition
+            _MODEL_CACHE.update({"key": key, "model": JepaTransition()})
+            print("[counterfactual] PROMOTED JEPA-backed transition model")
+        return _MODEL_CACHE["model"]
     prod = "data/world_model/transitions_prod.jsonl"
-    base = "data/world_model/transitions.jsonl"
-    path = prod if os.path.exists(prod) else base
-    mtime = os.path.getmtime(path)
-    if _MODEL_CACHE["path"] != path or _MODEL_CACHE["mtime"] != mtime:
-        # transitions_prod rows are all split="train"; AnnoMI file filters to train.
-        _MODEL_CACHE.update({"path": path, "mtime": mtime,
-                             "model": TransitionModel.from_jsonl(path, split="train")})
-        print(f"[counterfactual] loaded transition model from {path} (mtime {int(mtime)})")
+    path = prod if os.path.exists(prod) else "data/world_model/transitions.jsonl"
+    key = ("tabular", path, os.path.getmtime(path))
+    if _MODEL_CACHE["key"] != key:
+        _MODEL_CACHE.update({"key": key, "model": TransitionModel.from_jsonl(path, split="train")})
+        print(f"[counterfactual] loaded tabular transition model from {path} (mtime {int(key[2])})")
     return _MODEL_CACHE["model"]
 
 

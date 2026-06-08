@@ -31,9 +31,13 @@ def _macro_f1(preds, golds, classes):
 
 
 def eval_state_estimator(val_path="data/world_model/talktype_val.jsonl",
-                         clf_path="runs/talktype_clf"):
+                         clf_path=None):
+    # prefer the production mpnet labeler if present
+    if clf_path is None:
+        clf_path = next((p for p in ("runs/talktype_clf_mpnet", "runs/talktype_clf")
+                         if os.path.isdir(p)), "runs/talktype_clf")
     if not os.path.isdir(clf_path):
-        return {"status": "skipped (no runs/talktype_clf)"}
+        return {"status": "skipped (no talk-type classifier)"}
     import torch
     from transformers import AutoTokenizer, AutoModelForSequenceClassification
     dev = "cuda" if torch.cuda.is_available() else "cpu"

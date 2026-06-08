@@ -336,6 +336,24 @@ mechanism that pushes data past the crossover, and the model-agnostic gate auto-
 JEPA when it wins — no manual bet, data decides. (Wiring a JEPA-backed `predict_dist`
 into the MPC planner is the follow-up for when that crossover happens.)
 
+## JEPA last mile + harder synth + more eval dims (2026-06-08)
+
+- **JEPA last mile** (`jepa_transition.py`): `JepaTransition` is a DROP-IN for the
+  tabular model (same `predict_dist(prev_talk, action)`), bridging the planner's
+  discrete state to JEPA's text-embedding state via per-talk-type prototype contexts +
+  a linear probe (27 cells precomputed → O(1) lookup). Verified the MPC planner runs on
+  it (ranks negotiation/options/open-Q top for sustain). **Auto-promotion** wired:
+  `continuous_improve.py` writes `runs/world_model_champion.txt` ("tabular"|"jepa") from
+  the real-val gate; `counterfactual._model()` serves the champion (hot-reload). JEPA is
+  one file-flip from production the moment it beats tabular on real val.
+- **Harder synth** (`gen_synth_mi.py`): `--keep-on-target` (stance-consistency rejection
+  at gen time — keep only exchanges the labeler reads as the target weak class), +20
+  behaviors, 7 client personas. Wired into the weekly flywheel.
+- **More eval dims** (`scripts/eval/eval_quality.py`, in `run_all`): MI-consistency of
+  recommendations = **1.0** (planner always recommends an evoking, MI-adherent action);
+  calibration **Brier 0.47** (vs 0.67 uniform); clinical-validity change gap **+0.093**
+  (evoking 0.30 > directive 0.20 P(change) — agrees with MI theory).
+
 ## Next steps (not yet built)
 
 - Tier 3 / MI-JEPA only if we want learned latent dynamics (the dual-use `history`/`future_text`

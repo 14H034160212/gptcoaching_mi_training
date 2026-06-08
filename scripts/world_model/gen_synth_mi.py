@@ -27,7 +27,14 @@ import torch.nn.functional as F
 TALKS = ["change", "sustain", "neutral"]
 BEHAVIORS = ["drinking", "smoking", "exercising regularly", "eating healthier",
              "procrastination", "screen time", "taking my medication",
-             "managing my anger", "gambling", "my sleep habits"]
+             "managing my anger", "gambling", "my sleep habits",
+             "cutting back on caffeine", "spending money", "social media use",
+             "going to therapy", "studying for my exams", "cannabis use",
+             "managing my diabetes", "setting boundaries at work",
+             "drinking more water", "quitting vaping"]
+PERSONAS = ["", "You are tired and skeptical. ", "You are guarded and brief. ",
+            "You are emotional and overwhelmed. ", "You are defensive. ",
+            "You are quietly hopeful. ", "You are frustrated with being told what to do. "]
 
 CLIENT_SYS = {
     "change": "You are roleplaying a therapy CLIENT who is becoming motivated to change. "
@@ -65,6 +72,8 @@ def main():
     ap.add_argument("--bs", type=int, default=40)
     ap.add_argument("--sustain-frac", type=float, default=0.5,
                     help="fraction of exchanges targeting sustain talk (rest=change)")
+    ap.add_argument("--keep-on-target", action="store_true",
+                    help="rejection-sample at gen time: keep only exchanges the labeler reads as the target stance")
     args = ap.parse_args()
 
     from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModelForSequenceClassification
@@ -98,10 +107,11 @@ def main():
     for s in range(0, args.n, args.bs):
         batch_st = stances[s:s + args.bs]
         beh = [BEHAVIORS[(s + i) % len(BEHAVIORS)] for i in range(len(batch_st))]
-        # 1) client opening
-        op_prompts = [[{"role": "system", "content": CLIENT_SYS[st]},
+        # 1) client opening (with a varied persona for diversity)
+        persona = [PERSONAS[(s + i) % len(PERSONAS)] for i in range(len(batch_st))]
+        op_prompts = [[{"role": "system", "content": persona[i] + CLIENT_SYS[st]},
                        {"role": "user", "content": f"Open up about {b} to your counselor."}]
-                      for st, b in zip(batch_st, beh)]
+                      for i, (st, b) in enumerate(zip(batch_st, beh))]
         openings = gen(model, tok, op_prompts, 48)
         # 2) counselor reply
         co_prompts = [[{"role": "system", "content": COACH_SYS},
@@ -122,6 +132,8 @@ def main():
             fu, op = followups[i].strip(), openings[i].strip()
             if (fu.lower().startswith(("counselor", "your counselor")) or len(fu) < 5 or len(op) < 5):
                 continue  # drop prompt-leak / empty artifacts inline
+            if args.keep_on_target and next_lab[i] != batch_st[i]:
+                continue  # stance-consistency rejection: keep only on-target weak-class signal
             records.append({
                 "prev_talk": prev_lab[i], "action": act_lab[i], "next_talk": next_lab[i],
                 "conf": round(min(prev_conf[i], next_conf[i]), 4),
