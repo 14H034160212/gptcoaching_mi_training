@@ -1,0 +1,24 @@
+{
+  "backbone": "sentence-transformers/all-mpnet-base-v2",
+  "n_val": 563,
+  "target_probe (sees reply, upper bound)": {
+    "acc": 0.6199,
+    "macro_f1": 0.5624
+  },
+  "jepa_dynamics_readout (predicted latents)": {
+    "acc": 0.46,
+    "macro_f1": 0.3953
+  },
+  "context_readout": {
+    "acc": 0.4778,
+    "macro_f1": 0.4254
+  },
+  "distilbert_jepa_dynamics": {
+    "acc": 0.4458,
+    "macro_f1": 0.3815
+  },
+  "tabular_transition_baseline": {
+    "acc": 0.6714,
+    "macro_f1": 0.5606
+  }
+}

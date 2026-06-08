@@ -221,9 +221,34 @@ Results (val, 563), reports/mi_jepa_eval.json + mi_jepa_readout.json:
   Methodology held — Tier 1 is the bar, and JEPA hasn't cleared it, so the tabular
   model + MPC stays the production dynamics engine.
 
-**Levers to revisit JEPA later (not chased now — won't flip the verdict at 4k):**
-self-supervised pretrain on a larger counseling/dialogue corpus then probe AnnoMI;
-stronger/frozen sentence-encoder target; more epochs; larger latent.
+### Scaling lever #1 — frozen strong encoder (`mi_jepa_frozen.py`, all-mpnet-base-v2)
+
+Tried the top lever: freeze a sentence encoder pretrained on ~1B pairs (scale via
+pretraining), train only the predictor. Result (reports/mi_jepa_frozen_eval.json):
+
+| eval | acc | macro-F1 |
+|---|---|---|
+| target-probe (mpnet, sees reply — upper bound) | 0.62 | **0.56** |
+| JEPA dynamics readout (mpnet) | 0.46 | 0.40 |
+| JEPA dynamics (distilbert) | 0.45 | 0.38 |
+| tabular transition baseline | 0.67 | 0.56 |
+
+**Finding — the lever fixed the representation, not the dynamics:**
+- target-probe jumped 0.44 → **0.56** F1 = matches the tabular model's predictive F1
+  and the supervised talk-type classifier (0.55). **Representation is no longer the bottleneck.**
+- dynamics prediction barely moved (0.38 → 0.40), still << tabular 0.56. So the
+  bottleneck is the **predictor**: forecasting a 768-d free-form next-utterance
+  embedding from (context, action) is far harder than modeling the discrete 3-way
+  talk-type transition the tabular model targets directly. At 4k examples the
+  discrete model is much more sample-efficient.
+- **Useful byproduct:** frozen mpnet + linear probe matches the fine-tuned
+  talk-type classifier (F1 ~0.56) for free — a cheaper state estimator.
+
+**Verdict:** tabular + MPC stays the production dynamics engine. The remaining
+untested big lever is **data scale** (the predictor is data-starved, not mis-specified):
+self-supervised pretrain the predictor on a much larger corpus (e.g. tens of
+thousands of LLM-simulated MI turns) then probe AnnoMI. That's expensive (3B-model
+generation) and needs a go-decision; deferred.
 
 ## Next steps (not yet built)
 
