@@ -197,6 +197,34 @@ crisis hit, and flags risky counselor replies.
 Note: `/api/counterfactual` lazy-imports `counterfactual` and Python caches it, so
 **the live server needs a restart** to pick up the learned tagger + safety layer.
 
+## Tier 3 — MI-JEPA (2026-06-08) — implemented; HONEST result: does NOT beat tabular yet
+
+`scripts/world_model/mi_jepa.py` — action-conditioned MI-JEPA (V-JEPA 2-AC style):
+trainable context encoder + EMA target encoder (distilbert backbone) + action-
+conditioned predictor, VICReg loss (invariance + variance + covariance). Trained
+8 epochs on the AnnoMI transitions (self-supervised, no talk-type labels).
+Validation by linear probe (`mi_jepa.py` built-in + `mi_jepa_probe.py` standard readout).
+
+Results (val, 563), reports/mi_jepa_eval.json + mi_jepa_readout.json:
+
+| eval | acc | macro-F1 |
+|---|---|---|
+| target-probe (sees the reply — upper bound) | 0.56 | 0.44 |
+| JEPA dynamics, probe on target basis | 0.36 | 0.28 |
+| **JEPA dynamics, standard readout (probe on predicted latents)** | **0.45** | **0.38** |
+| **tabular transition baseline** | **0.67** | **0.56** |
+
+- No collapse (variance term held ~1.55, inv plateaued ~0.13).
+- The predicted latent linearly encodes next-talk-type at F1 0.38 — real signal, but
+  **below the count-based tabular model (0.56)** at this data scale (4,106 train).
+- This is the documented Tier-3 risk: dialogue-JEPA shines at scale; AnnoMI is tiny.
+  Methodology held — Tier 1 is the bar, and JEPA hasn't cleared it, so the tabular
+  model + MPC stays the production dynamics engine.
+
+**Levers to revisit JEPA later (not chased now — won't flip the verdict at 4k):**
+self-supervised pretrain on a larger counseling/dialogue corpus then probe AnnoMI;
+stronger/frozen sentence-encoder target; more epochs; larger latent.
+
 ## Next steps (not yet built)
 
 - Tier 3 / MI-JEPA only if we want learned latent dynamics (the dual-use `history`/`future_text`

@@ -1,0 +1,15 @@
+{
+  "n_val": 563,
+  "target_probe (upper bound, sees reply)": {
+    "acc": 0.5577,
+    "macro_f1": 0.4446
+  },
+  "jepa_dynamics (predicts next_talk, no reply)": {
+    "acc": 0.3623,
+    "macro_f1": 0.2845
+  },
+  "tabular_transition_baseline": {
+    "acc": 0.6714,
+    "macro_f1": 0.5606
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "n_val": 563,
+  "jepa_dynamics_readout (probe fit on PREDICTED latents)": {
+    "acc": 0.4458,
+    "macro_f1": 0.3815
+  },
+  "context_readout (probe fit on CONTEXT latents)": {
+    "acc": 0.3872,
+    "macro_f1": 0.2979
+  },
+  "tabular_transition_baseline": {
+    "acc": 0.6714,
+    "macro_f1": 0.5606
+  }
+}
