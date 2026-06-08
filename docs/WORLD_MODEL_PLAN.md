@@ -272,7 +272,26 @@ idea — `silver_label_esconv.py` + `active_loop.py`, reports/active_loop.json):
 - This is DAgger/STaR-flavored active learning. Honest framing: gain is small and
   bounded by silver-label noise + domain gap; the value is the *mechanism* (real-val
   reward gate that refuses harmful data), which scales to better labelers / in-domain
-  synthesis. Next: Qwen-generated in-domain MI rollouts as the synthesis source.
+  synthesis.
+
+### Scaling lever #3 — in-domain synthetic MI (DPO Qwen self-play)
+
+`gen_synth_mi.py`: DPO Qwen generates MI exchanges (coach + simulated client)
+targeting the weak talk-types; silver-label both client turns + tag action.
+- **In-domain helped label quality:** conf quartiles 0.47/0.54/**0.64** vs ESConv's
+  0.43/0.47/0.53 — cleaner silver labels, as hypothesized.
+- **But generation skewed to change-talk** (422 change vs 160 sustain) while the
+  weak class is *sustain* → starved for high-conf sustain examples. Standalone synth
+  loop gain = **0** (the 4 high-conf sustain triples lowered real-val → gate rejected).
+- **Combined ESConv+synth pool**: same **+0.008** as ESConv alone — synth added
+  nothing beyond ESConv at this scale (reports/active_loop_synth.json, _combined.json).
+
+**Net lesson (the useful negative result):** the online loop's gain is bottlenecked
+by high-confidence examples *of the specific weak class*, not raw data volume. To move
+the needle: (1) target generation hard at the weak class (sustain), (2) improve the
+*labeler* (talk-type classifier, currently F1 0.55) since label noise caps the whole
+loop, (3) human-verify a small high-value slice instead of pure silver. The real-val
+gate worked perfectly throughout — it never let a non-improving batch through.
 
 ## Next steps (not yet built)
 

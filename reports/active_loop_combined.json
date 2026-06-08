@@ -1,0 +1,223 @@
+{
+  "baseline": {
+    "acc": 0.6714,
+    "macro_f1": 0.5606,
+    "per_class": {
+      "change": {
+        "recall": 0.5497,
+        "f1": 0.5608
+      },
+      "sustain": {
+        "recall": 0.2603,
+        "f1": 0.3585
+      },
+      "neutral": {
+        "recall": 0.8142,
+        "f1": 0.7624
+      }
+    }
+  },
+  "final": {
+    "acc": 0.6625,
+    "macro_f1": 0.5686,
+    "per_class": {
+      "change": {
+        "recall": 0.5364,
+        "f1": 0.5548
+      },
+      "sustain": {
+        "recall": 0.3425,
+        "f1": 0.3968
+      },
+      "neutral": {
+        "recall": 0.7876,
+        "f1": 0.7542
+      }
+    }
+  },
+  "delta_macro_f1": 0.008,
+  "total_silver_added": 400,
+  "history": [
+    {
+      "round": 0,
+      "added": 0,
+      "pool_conf": 0.55,
+      "acc": 0.6714,
+      "macro_f1": 0.5606,
+      "per_class": {
+        "change": {
+          "recall": 0.5497,
+          "f1": 0.5608
+        },
+        "sustain": {
+          "recall": 0.2603,
+          "f1": 0.3585
+        },
+        "neutral": {
+          "recall": 0.8142,
+          "f1": 0.7624
+        }
+      }
+    },
+    {
+      "round": 1,
+      "added": 400,
+      "weak_class": "sustain",
+      "pool_conf": 0.55,
+      "acc": 0.6625,
+      "macro_f1": 0.5686,
+      "per_class": {
+        "change": {
+          "recall": 0.5364,
+          "f1": 0.5548
+        },
+        "sustain": {
+          "recall": 0.3425,
+          "f1": 0.3968
+        },
+        "neutral": {
+          "recall": 0.7876,
+          "f1": 0.7542
+        }
+      }
+    },
+    {
+      "round": 2,
+      "added": 0,
+      "weak_class": "sustain",
+      "pool_conf": 0.6,
+      "rejected_f1": 0.5625,
+      "acc": 0.6625,
+      "macro_f1": 0.5686,
+      "per_class": {
+        "change": {
+          "recall": 0.5364,
+          "f1": 0.5548
+        },
+        "sustain": {
+          "recall": 0.3425,
+          "f1": 0.3968
+        },
+        "neutral": {
+          "recall": 0.7876,
+          "f1": 0.7542
+        }
+      }
+    },
+    {
+      "round": 3,
+      "added": 0,
+      "weak_class": "sustain",
+      "pool_conf": 0.65,
+      "rejected_f1": 0.5625,
+      "acc": 0.6625,
+      "macro_f1": 0.5686,
+      "per_class": {
+        "change": {
+          "recall": 0.5364,
+          "f1": 0.5548
+        },
+        "sustain": {
+          "recall": 0.3425,
+          "f1": 0.3968
+        },
+        "neutral": {
+          "recall": 0.7876,
+          "f1": 0.7542
+        }
+      }
+    },
+    {
+      "round": 4,
+      "added": 0,
+      "weak_class": "sustain",
+      "pool_conf": 0.7,
+      "rejected_f1": 0.5686,
+      "acc": 0.6625,
+      "macro_f1": 0.5686,
+      "per_class": {
+        "change": {
+          "recall": 0.5364,
+          "f1": 0.5548
+        },
+        "sustain": {
+          "recall": 0.3425,
+          "f1": 0.3968
+        },
+        "neutral": {
+          "recall": 0.7876,
+          "f1": 0.7542
+        }
+      }
+    },
+    {
+      "round": 6,
+      "added": 0,
+      "weak_class": "sustain",
+      "pool_conf": 0.7,
+      "rejected_f1": 0.5686,
+      "acc": 0.6625,
+      "macro_f1": 0.5686,
+      "per_class": {
+        "change": {
+          "recall": 0.5364,
+          "f1": 0.5548
+        },
+        "sustain": {
+          "recall": 0.3425,
+          "f1": 0.3968
+        },
+        "neutral": {
+          "recall": 0.7876,
+          "f1": 0.7542
+        }
+      }
+    },
+    {
+      "round": 8,
+      "added": 0,
+      "weak_class": "sustain",
+      "pool_conf": 0.7,
+      "rejected_f1": 0.5686,
+      "acc": 0.6625,
+      "macro_f1": 0.5686,
+      "per_class": {
+        "change": {
+          "recall": 0.5364,
+          "f1": 0.5548
+        },
+        "sustain": {
+          "recall": 0.3425,
+          "f1": 0.3968
+        },
+        "neutral": {
+          "recall": 0.7876,
+          "f1": 0.7542
+        }
+      }
+    },
+    {
+      "round": 10,
+      "added": 0,
+      "weak_class": "sustain",
+      "pool_conf": 0.7,
+      "rejected_f1": 0.5686,
+      "acc": 0.6625,
+      "macro_f1": 0.5686,
+      "per_class": {
+        "change": {
+          "recall": 0.5364,
+          "f1": 0.5548
+        },
+        "sustain": {
+          "recall": 0.3425,
+          "f1": 0.3968
+        },
+        "neutral": {
+          "recall": 0.7876,
+          "f1": 0.7542
+        }
+      }
+    }
+  ]
+}
