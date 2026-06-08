@@ -208,6 +208,12 @@ class MonitoringReq(BaseModel):
     metrics: Dict[str, Any]
     notes: str
 
+class CounterfactualReq(BaseModel):
+    user_id: str = "anon"
+    client_msg: str          # the client's last message (state is estimated from this)
+    coach_reply: str         # the counselor reply to evaluate
+    horizon: int = 3
+
 
 # ===== Helpers =====
 def append_jsonl(user_id: str, payload: dict):
@@ -491,6 +497,22 @@ def health():
         "device": str(model.device),
         "log_dir": LOG_DIR,
     }
+
+@api.post("/counterfactual")
+def counterfactual_endpoint(req: CounterfactualReq, current_user: dict = Depends(get_current_user)):
+    """World-model counterfactual MI feedback.
+
+    Estimates the client's talk-type state, tags the counselor's MI action, and
+    runs the MPC planner to compare it against the model-optimal intervention.
+    Backend for the World Model Panel in the UI.
+    """
+    req.user_id = current_user["user_id"]
+    try:
+        from scripts.world_model.counterfactual import coach_feedback
+        return coach_feedback(req.client_msg, req.coach_reply, horizon=req.horizon)
+    except Exception as e:
+        print(f"[counterfactual] failed: {e}")
+        return {"error": str(e)}
 
 @api.post("/chat")
 def chat_endpoint(req: ChatRequest, current_user: dict = Depends(get_current_user)):

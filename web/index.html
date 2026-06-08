@@ -965,6 +965,7 @@
           <button class="panel-tab" data-panel="diagnosis">Diagnosis</button>
           <button class="panel-tab" data-panel="treatment">Treatment</button>
           <button class="panel-tab" data-panel="monitoring">Monitoring</button>
+          <button class="panel-tab" data-panel="worldmodel">World Model</button>
         </div>
 
         <div class="panel-content">
@@ -1082,6 +1083,60 @@
                 <p style="color: var(--text-muted); font-size: 0.85rem; text-align:center; padding:20px;">No assessments
                   submitted yet.</p>
               </div>
+            </div>
+          </div>
+
+          <!-- World Model Panel -->
+          <div id="worldmodel-panel" class="panel-section">
+            <h4>World Model — Counterfactual MI Feedback</h4>
+            <p style="font-size:0.82rem; color:var(--text-muted); margin:4px 0 16px;">
+              The world model estimates the client's <b>talk-type state</b>, tags your MI <b>action</b>,
+              and plans (MPC) the intervention that maximizes predicted <b>change talk</b>.
+            </p>
+
+            <!-- Inputs -->
+            <div style="background:#f8fafc; padding:14px; border-radius:8px; border:1px solid var(--border); margin-bottom:16px;">
+              <div class="metric-row" style="flex-direction:column; align-items:stretch; gap:4px;">
+                <label style="font-size:0.8rem;">Client's last message</label>
+                <textarea id="wm-client" rows="2" placeholder="e.g. I know I should cut down but I don't think I can."></textarea>
+              </div>
+              <div class="metric-row" style="flex-direction:column; align-items:stretch; gap:4px; margin-top:8px;">
+                <label style="font-size:0.8rem;">Your (counselor) reply to evaluate</label>
+                <textarea id="wm-coach" rows="2" placeholder="e.g. You should really start this week."></textarea>
+              </div>
+              <button class="confirm-btn" id="wm-evaluate-btn" style="margin-top:10px;">
+                Evaluate Reply
+              </button>
+              <div style="font-size:0.72rem; color:var(--text-muted); margin-top:6px;">
+                Tip: leave blank and it auto-fills from your latest chat turn.
+              </div>
+            </div>
+
+            <!-- Verdict -->
+            <div id="wm-verdict" style="display:none;">
+              <div id="wm-state-row" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px;"></div>
+
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
+                <div style="padding:12px; border-radius:8px; border:1px solid var(--border);" id="wm-actual-card">
+                  <div style="font-size:0.72rem; text-transform:uppercase; color:var(--text-muted); letter-spacing:.05em;">Your action</div>
+                  <div id="wm-actual-action" style="font-weight:700; font-size:1.05rem; margin:2px 0 8px;"></div>
+                  <div id="wm-actual-bars"></div>
+                </div>
+                <div style="padding:12px; border-radius:8px; border:1px solid #bbf7d0; background:#f0fdf4;" id="wm-best-card">
+                  <div style="font-size:0.72rem; text-transform:uppercase; color:#15803d; letter-spacing:.05em;">Model suggests</div>
+                  <div id="wm-best-action" style="font-weight:700; font-size:1.05rem; margin:2px 0 8px; color:#15803d;"></div>
+                  <div id="wm-best-bars"></div>
+                  <div id="wm-best-example" style="font-style:italic; font-size:0.82rem; margin-top:8px; color:#166534;"></div>
+                </div>
+              </div>
+
+              <div id="wm-uplift-banner" style="padding:10px 14px; border-radius:8px; font-size:0.9rem; margin-bottom:18px;"></div>
+
+              <h5 style="margin-bottom:8px; border-bottom:1px solid #eee; padding-bottom:6px;">All MI actions ranked (by predicted value)</h5>
+              <div id="wm-ranked"></div>
+            </div>
+            <div id="wm-empty" style="color:var(--text-muted); font-size:0.85rem; text-align:center; padding:24px;">
+              Enter a turn (or chat first) and click <b>Evaluate Reply</b>.
             </div>
           </div>
 
@@ -1368,6 +1423,9 @@
 
         const data = await res.json();
         appendMsg("coach", data.reply || "");
+        // Remember the latest turn so the World Model panel can auto-evaluate it.
+        lastClientMsg = msg;
+        lastCoachReply = data.reply || "";
         statusEl.textContent = `Ready. Stage: ${data.journey_stage || currentStage}`;
 
         // Update journey bar if stage info returned
@@ -1573,11 +1631,16 @@
     });
 
     // === Panel Tab Management ===
+    // Latest chat turn, used by the World Model panel for auto-evaluation.
+    let lastClientMsg = "";
+    let lastCoachReply = "";
+
     const panelTabs = document.querySelectorAll('.panel-tab');
     const pillarsPanel = document.getElementById('pillars-panel');
     const diagnosisPanel = document.getElementById('diagnosis-panel');
     const treatmentPanel = document.getElementById('treatment-panel');
     const monitoringPanel = document.getElementById('monitoring-panel');
+    const worldmodelPanel = document.getElementById('worldmodel-panel');
 
     const confirmDiagnosisBtn = document.getElementById('confirm-diagnosis-btn');
     const acceptTreatmentBtn = document.getElementById('accept-treatment-btn');
@@ -1588,6 +1651,7 @@
       diagnosisPanel.classList.remove('visible');
       treatmentPanel.classList.remove('visible');
       monitoringPanel.classList.remove('visible');
+      worldmodelPanel.classList.remove('visible');
       panelTabs.forEach(tab => tab.classList.remove('active'));
     }
 
@@ -1606,6 +1670,9 @@
       } else if (panelName === 'monitoring') {
         monitoringPanel.classList.add('visible');
         loadMonitoringHistory();
+      } else if (panelName === 'worldmodel') {
+        worldmodelPanel.classList.add('visible');
+        initWorldModelPanel();
       }
 
       panelTabs.forEach(tab => {
@@ -1618,6 +1685,121 @@
     panelTabs.forEach(tab => {
       tab.addEventListener('click', () => showPanel(tab.dataset.panel));
     });
+
+    // === World Model Panel ===
+    const TALK_COLORS = { change: "#16a34a", sustain: "#dc2626", neutral: "#64748b" };
+    let wmWired = false;
+
+    function initWorldModelPanel() {
+      const clientEl = document.getElementById('wm-client');
+      const coachEl = document.getElementById('wm-coach');
+      // Auto-fill from the latest chat turn if the boxes are empty.
+      if (!clientEl.value && lastClientMsg) clientEl.value = lastClientMsg;
+      if (!coachEl.value && lastCoachReply) coachEl.value = lastCoachReply;
+      if (!wmWired) {
+        document.getElementById('wm-evaluate-btn').addEventListener('click', wmEvaluate);
+        wmWired = true;
+      }
+    }
+
+    function wmBar(label, value, color) {
+      const pct = Math.round(value * 100);
+      return `<div style="display:flex; align-items:center; gap:8px; margin:3px 0; font-size:0.78rem;">
+          <span style="width:64px; color:${color}; font-weight:600;">${label}</span>
+          <div style="flex:1; background:#e2e8f0; border-radius:4px; height:8px; overflow:hidden;">
+            <div style="width:${pct}%; height:100%; background:${color};"></div>
+          </div>
+          <span style="width:34px; text-align:right; color:var(--text-muted);">${pct}%</span>
+        </div>`;
+    }
+
+    function wmTalkBadge(label) {
+      const c = TALK_COLORS[label] || "#64748b";
+      return `<span style="background:${c}22; color:${c}; border:1px solid ${c}55;
+        padding:3px 10px; border-radius:999px; font-size:0.78rem; font-weight:700;">${label}</span>`;
+    }
+
+    async function wmEvaluate() {
+      const userId = userIdInput.value.trim() || "anon";
+      const client_msg = document.getElementById('wm-client').value.trim();
+      const coach_reply = document.getElementById('wm-coach').value.trim();
+      const btn = document.getElementById('wm-evaluate-btn');
+      if (!client_msg || !coach_reply) {
+        alert("Please provide both the client's message and your reply (or chat first).");
+        return;
+      }
+      btn.disabled = true; btn.textContent = "Evaluating...";
+      try {
+        const resp = await apiFetch('/counterfactual', {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: userId, client_msg, coach_reply, horizon: 3 }),
+        });
+        const fb = await resp.json();
+        if (fb.error) throw new Error(fb.error);
+        renderWorldModel(fb);
+      } catch (err) {
+        console.error(err);
+        alert("World model evaluation failed: " + err.message);
+      } finally {
+        btn.disabled = false; btn.textContent = "Evaluate Reply";
+      }
+    }
+
+    function renderWorldModel(fb) {
+      document.getElementById('wm-empty').style.display = "none";
+      document.getElementById('wm-verdict').style.display = "block";
+
+      // State row
+      document.getElementById('wm-state-row').innerHTML =
+        `<div>Estimated client state: ${wmTalkBadge(fb.estimated_client_state)}</div>`;
+
+      // Actual card
+      document.getElementById('wm-actual-action').textContent = fb.your_action;
+      document.getElementById('wm-actual-bars').innerHTML =
+        wmBar("change", fb.predicted_effect.P_change, TALK_COLORS.change) +
+        wmBar("sustain", fb.predicted_effect.P_sustain, TALK_COLORS.sustain);
+
+      // Best card
+      document.getElementById('wm-best-action').textContent = fb.better_action;
+      document.getElementById('wm-best-bars').innerHTML =
+        wmBar("change", fb.better_effect.P_change, TALK_COLORS.change) +
+        wmBar("sustain", fb.better_effect.P_sustain, TALK_COLORS.sustain);
+      document.getElementById('wm-best-example').textContent = `"${fb.better_example}"`;
+
+      // Uplift banner
+      const banner = document.getElementById('wm-uplift-banner');
+      if (fb.is_optimal) {
+        banner.style.background = "#f0fdf4"; banner.style.color = "#15803d";
+        banner.innerHTML = `✓ Your reply already used the model-optimal MI action for this state.`;
+      } else {
+        const up = (fb.change_uplift * 100).toFixed(0);
+        banner.style.background = "#fffbeb"; banner.style.color = "#b45309";
+        banner.innerHTML = `Switching from <b>${fb.your_action}</b> to <b>${fb.better_action}</b>
+          is predicted to raise change talk by <b>+${up} pts</b> (and reduce sustain talk).`;
+      }
+
+      // Ranked table
+      const maxQ = Math.max(...fb.ranked_actions.map(r => r.Q));
+      const minQ = Math.min(...fb.ranked_actions.map(r => r.Q));
+      const span = (maxQ - minQ) || 1;
+      document.getElementById('wm-ranked').innerHTML = fb.ranked_actions.map((r, i) => {
+        const w = Math.round(((r.Q - minQ) / span) * 100);
+        const isYours = r.action === fb.your_action;
+        const isBest = r.action === fb.better_action;
+        const mark = isBest ? "★" : (isYours ? "▶" : "");
+        const bg = isBest ? "#f0fdf4" : (isYours ? "#fffbeb" : "transparent");
+        return `<div style="display:flex; align-items:center; gap:8px; padding:5px 8px; border-radius:6px; background:${bg};">
+            <span style="width:14px; color:#15803d; font-weight:700;">${mark}</span>
+            <span style="width:140px; font-size:0.82rem; ${isBest ? 'font-weight:700;' : ''}">${r.action}</span>
+            <div style="flex:1; background:#e2e8f0; border-radius:4px; height:10px; overflow:hidden;">
+              <div style="width:${w}%; height:100%; background:${isBest ? '#16a34a' : 'var(--primary)'};"></div>
+            </div>
+            <span style="width:90px; text-align:right; font-size:0.74rem; color:var(--text-muted);">
+              Δchange ${(r.P_change * 100).toFixed(0)}%</span>
+          </div>`;
+      }).join("");
+    }
 
     // === Load Three Pillars Data ===
     async function loadPillarsData() {

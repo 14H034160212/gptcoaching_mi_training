@@ -3,3 +3,7 @@ runs/
 wandb/
 .vscode
 scripts/__pycache__
+scripts/world_model/__pycache__
+.claude/
+cloudflared.log
+data/world_model/

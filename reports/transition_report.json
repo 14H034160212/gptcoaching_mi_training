@@ -1,0 +1,78 @@
+{
+  "n_train": 4106,
+  "n_val": 563,
+  "val_accuracy": {
+    "B0_prior": 0.6021,
+    "B1_momentum": 0.659,
+    "WM_action_only": 0.5986,
+    "WM_full": 0.6714
+  },
+  "val_macro_f1": {
+    "B0_prior": 0.2506,
+    "B1_momentum": 0.4421,
+    "WM_action_only": 0.2537,
+    "WM_full": 0.5548
+  },
+  "val_nll": {
+    "B0_prior": 0.9271,
+    "B1_momentum": 0.809,
+    "WM_full": 0.7981
+  },
+  "action_effect": {
+    "advice": {
+      "n": 104,
+      "P_change": 0.28,
+      "P_sustain": 0.159,
+      "P_neutral": 0.561
+    },
+    "closed_question": {
+      "n": 484,
+      "P_change": 0.177,
+      "P_sustain": 0.111,
+      "P_neutral": 0.713
+    },
+    "complex_reflection": {
+      "n": 518,
+      "P_change": 0.238,
+      "P_sustain": 0.119,
+      "P_neutral": 0.643
+    },
+    "information": {
+      "n": 322,
+      "P_change": 0.142,
+      "P_sustain": 0.111,
+      "P_neutral": 0.748
+    },
+    "negotiation": {
+      "n": 57,
+      "P_change": 0.517,
+      "P_sustain": 0.05,
+      "P_neutral": 0.433
+    },
+    "open_question": {
+      "n": 684,
+      "P_change": 0.374,
+      "P_sustain": 0.127,
+      "P_neutral": 0.499
+    },
+    "options": {
+      "n": 26,
+      "P_change": 0.207,
+      "P_sustain": 0.069,
+      "P_neutral": 0.724
+    },
+    "other": {
+      "n": 1341,
+      "P_change": 0.229,
+      "P_sustain": 0.115,
+      "P_neutral": 0.656
+    },
+    "simple_reflection": {
+      "n": 570,
+      "P_change": 0.237,
+      "P_sustain": 0.08,
+      "P_neutral": 0.682
+    }
+  },
+  "base_rate_change": 0.247
+}
