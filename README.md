@@ -325,22 +325,33 @@ human counselors. Every component is **anchored to AnnoMI ground-truth labels**
 - **Action tagger** — 9-class MI action classifier (+ rule fallback).
 - **Safety layer** — high-recall crisis screen; escalates instead of coaching (recall 5/5, FP 0/5).
 - **Eval suite** (`scripts/eval/`) — state-transition, counterfactual-ranking, safety → `reports/world_model_eval.json`.
-- **Online active loop** — the "synthesize-where-weak, retrain, gate on real val" idea (DAgger/STaR-style): silver-label real ESConv / Qwen-self-play data, target the weakest class, **keep only if real AnnoMI-val improves**. Self-correcting (+0.008 macro-F1; the gate rejects all non-improving data).
+- **Online active loop** — the "synthesize-where-weak, retrain, gate on real val" idea (DAgger/STaR-style): silver-label real ESConv / Qwen-self-play data, target the weakest class, **keep only if real AnnoMI-val improves**. With the mpnet labeler + sustain-targeted data it lifts the transition model **macro-F1 0.56 → 0.58** (gain entirely in the weak class: sustain recall 0.26 → 0.44); the gate rejects all non-improving data.
+
+### Production deployment + continuous-improvement flywheel
+The system is **self-improving and self-serving**:
+- **Live model** — `counterfactual._model()` serves the loop-augmented model from `transitions_prod.jsonl` with **mtime hot-reload**, so retrains swap in with **no server restart**.
+- **The flywheel** (`continuous_improve.py`, scheduled by cron):
+  1. `harvest_user_transitions.py` turns real chat traffic into silver transitions;
+  2. pools harvested-user + ESConv + **accumulating** Qwen-synth;
+  3. real-AnnoMI-val-gated `active_loop` → exports the winner to `transitions_prod.jsonl`;
+  4. **periodic synth regen** (`--regen-synth`, weekly) auto-targets the *current* weak class.
+- **Model-agnostic gate** — each cycle scores **tabular vs MI-JEPA** on the same real val and promotes the winner (tabular 0.58 > JEPA 0.41 now; auto-promotes JEPA once the data flywheel pushes it past — the RL/Tier-3 endgame).
+- **Integrity rule** — the gate is *always* real gold AnnoMI-val; user/silver data only ever enters the *training* pool, never the judge → the flywheel cannot self-deceive or drift.
+- **Schedule** — daily cheap cycle (`run_flywheel.sh`, 03:30) + weekly full cycle with synth regen (`run_flywheel_full.sh`, Sun 04:00); logs to `runs/flywheel.log`.
 
 ### Pipeline
 ```
-                 client message ──► State estimator (talk-type clf)  ──┐
-counselor reply ──► Action tagger (MI action clf / rules)             │
-                                                                       ▼
-                                            Tier-1 Transition model  P(next_talk|state,action)
-                                                                       │
-                                            Tier-2 MPC planner ◄───────┘  (+ Tier-3 MI-JEPA latent dynamics, research)
-                                                                       │
-                          Safety screen ──► /api/counterfactual ──► World Model Panel (web)
-                                            "you used X → P(change)=.. ; better: Y → +uplift"
+  client message ──► State estimator (talk-type clf, mpnet)  ──┐
+  counselor reply ─► Action tagger (MI action clf / rules)     │
+                                                               ▼
+                              Tier-1/2  Transition model + MPC planner   (Tier-3 MI-JEPA = challenger)
+                                                               │
+              Safety screen ──► /api/counterfactual ──► World Model Panel (web)
+                                "you used X → P(change)=.. ; better: Y → +uplift"
 
-        Online loop:  eval on real AnnoMI-val ─► find weakest class ─► synth/mine + silver-label
-                      ─► add ─► refit ─► KEEP iff real-val improves  (reward = held-out real F1)
+  FLYWHEEL (cron):  user chats ─► harvest ─► pool(+ESConv +accumulated synth, weak-class-targeted)
+        ─► active_loop  [reward = held-out REAL AnnoMI-val F1]  ─► transitions_prod.jsonl
+        ─► (mtime) hot-reload into live server   ─► model-agnostic gate: promote tabular | JEPA
 ```
 
 ### World Model files & commands
@@ -371,6 +382,12 @@ python -m scripts.world_model.build_esconv_pairs
 python -m scripts.world_model.silver_label_esconv --clf runs/talktype_clf_mpnet
 python -m scripts.world_model.gen_synth_mi --sustain-frac 0.8 --talk-clf runs/talktype_clf_mpnet
 python -m scripts.world_model.active_loop --silver data/world_model/combined_silver.jsonl --conf 0.55
+
+# Continuous-improvement flywheel (deploys best model with hot-reload; cron-scheduled)
+python -m scripts.world_model.continuous_improve              # one cheap cycle (harvest + loop)
+python -m scripts.world_model.continuous_improve --regen-synth # full cycle: also regenerate synth
+bash scripts/world_model/run_flywheel.sh                       # daily wrapper (cron 03:30)
+bash scripts/world_model/run_flywheel_full.sh                  # weekly wrapper (cron Sun 04:00)
 ```
 
 API: `POST /api/counterfactual` `{client_msg, coach_reply}` → estimated state, your
