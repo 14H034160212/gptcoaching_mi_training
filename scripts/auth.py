@@ -138,6 +138,8 @@ def send_magic_link_email(
         headers={
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
+            "User-Agent": "kerrio-ai/1.0 (+https://gptcoaching-mi-training.pages.dev)",
+            "Accept": "application/json",
         },
     )
     try:
