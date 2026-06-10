@@ -4,6 +4,15 @@ wandb/
 .vscode
 scripts/__pycache__
 scripts/world_model/__pycache__
+scripts/eval/__pycache__
 .claude/
 cloudflared.log
 data/world_model/
+
+# secrets — RESEND_API_KEY etc. (start_demo.sh sources this)
+.env
+
+# runtime logs
+app.log
+demo.log
+uvicorn_gpu*.log
