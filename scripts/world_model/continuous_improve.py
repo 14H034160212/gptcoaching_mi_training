@@ -37,7 +37,10 @@ def main():
     ap.add_argument("--anno", default="data/world_model/transitions.jsonl")
     ap.add_argument("--prod", default="data/world_model/transitions_prod.jsonl")
     ap.add_argument("--talk-clf", default="runs/talktype_clf_mpnet")
-    ap.add_argument("--conf", type=float, default=0.5)
+    # Empirical: conf=0.4 lets the active loop accept a second batch at higher
+    # conf in a later round (warm-up then refine), yielding macro_f1=0.5892 vs
+    # 0.5837 at conf=0.5 on AnnoMI val. See reports/exp/active_loop_b400_c0.4.json.
+    ap.add_argument("--conf", type=float, default=0.4)
     ap.add_argument("--budget", type=int, default=400)
     ap.add_argument("--skip-harvest", action="store_true")
     ap.add_argument("--regen-synth", action="store_true",
