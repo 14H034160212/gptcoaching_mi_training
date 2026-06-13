@@ -13,6 +13,7 @@ cookies (which browsers increasingly block).
 from __future__ import annotations
 
 import json
+import os
 import secrets
 import time
 import urllib.error
@@ -21,7 +22,9 @@ from pathlib import Path
 from threading import Lock
 from typing import Optional
 
-MAGIC_LINK_TTL_SECONDS = 15 * 60
+# Magic-link lifetime. Default 15 min for self-service email sign-in; can be
+# extended (e.g. for a forward-this-link demo handoff) via env.
+MAGIC_LINK_TTL_SECONDS = int(os.environ.get("MAGIC_LINK_TTL_SECONDS", 15 * 60))
 SESSION_TTL_SECONDS = 30 * 24 * 3600
 
 

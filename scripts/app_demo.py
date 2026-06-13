@@ -162,16 +162,30 @@ api = APIRouter()
 # ===== Auth =====
 auth_store = AuthStore()
 
+# Open demo mode: when AUTH_REQUIRED is off, anyone who opens the site can use it
+# without signing in, and all activity is attributed to DEMO_USER. The magic-link
+# auth system stays intact — flip AUTH_REQUIRED back on for real multi-user use.
+AUTH_REQUIRED = os.environ.get("AUTH_REQUIRED", "1").lower() not in ("0", "false", "no", "off")
+DEMO_USER = {
+    "email": os.environ.get("DEMO_USER_EMAIL", "demo@kerrio.ai"),
+    "user_id": os.environ.get("DEMO_USER_ID", "demo_user"),
+}
+
 
 def get_current_user(authorization: Optional[str] = Header(default=None)) -> dict:
-    """Resolve `Authorization: Bearer <session_token>` to a user record."""
-    if not authorization or not authorization.lower().startswith("bearer "):
-        raise HTTPException(status_code=401, detail="Missing bearer token")
-    token = authorization.split(None, 1)[1].strip()
-    user = auth_store.get_session_user(token)
-    if user is None:
-        raise HTTPException(status_code=401, detail="Invalid or expired session")
-    return user
+    """Resolve `Authorization: Bearer <session_token>` to a user record.
+
+    A valid session always wins. If none is present and AUTH_REQUIRED is off
+    (demo mode), fall back to the shared DEMO_USER instead of rejecting.
+    """
+    if authorization and authorization.lower().startswith("bearer "):
+        token = authorization.split(None, 1)[1].strip()
+        user = auth_store.get_session_user(token)
+        if user is not None:
+            return user
+    if not AUTH_REQUIRED:
+        return DEMO_USER
+    raise HTTPException(status_code=401, detail="Invalid or missing session")
 
 # Server-side per-user memory (lives for the process lifetime)
 SESSIONS: Dict[str, List[dict]] = defaultdict(list)
@@ -482,7 +496,11 @@ def auth_verify(req: AuthVerifyReq):
 
 @api.get("/auth/me")
 def auth_me(current_user: dict = Depends(get_current_user)):
-    return {"email": current_user["email"], "user_id": current_user["user_id"]}
+    return {
+        "email": current_user["email"],
+        "user_id": current_user["user_id"],
+        "demo_mode": not AUTH_REQUIRED,
+    }
 
 
 @api.post("/auth/logout")

@@ -1209,19 +1209,29 @@
         window.history.replaceState({}, "", url.pathname + (url.search ? url.search : "") + url.hash);
       }
 
-      // 2) If we have a session token, verify it.
-      if (getSessionToken()) {
-        try {
-          const r = await apiFetch("/auth/me");
-          if (r.ok) {
-            currentUser = await r.json();
-            document.getElementById("user-email").textContent = currentUser.email;
-            document.getElementById("user-id").value = currentUser.user_id;
-            hideLogin();
-            return true;
+      // 2) Ask who we are. We call /auth/me even with no token: in open demo
+      //    mode the server returns the shared demo user (200) and we skip login;
+      //    with auth required and no token it returns 401 and we show login.
+      try {
+        const headers = {};
+        const tok = getSessionToken();
+        if (tok) headers["Authorization"] = "Bearer " + tok;
+        const r = await fetch(apiBase + "/auth/me", { headers });
+        if (r.ok) {
+          currentUser = await r.json();
+          document.getElementById("user-email").textContent =
+            currentUser.demo_mode ? "Demo" : currentUser.email;
+          document.getElementById("user-id").value = currentUser.user_id;
+          // In open demo mode there is nothing to log out of — hide the button.
+          if (currentUser.demo_mode) {
+            const lb = document.getElementById("logout-btn");
+            if (lb) lb.style.display = "none";
           }
-        } catch (e) { /* unauthenticated; fall through */ }
-      }
+          hideLogin();
+          return true;
+        }
+        if (r.status === 401) clearSessionToken();  // stale token
+      } catch (e) { /* network error; fall through to login */ }
       showLogin();
       return false;
     }
