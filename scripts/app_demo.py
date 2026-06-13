@@ -87,6 +87,9 @@ LOG_DIR = os.environ.get("LOG_DIR", "runs/chat_logs")
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "").strip()
 MAIL_FROM = os.environ.get("MAIL_FROM", "onboarding@resend.dev").strip()
 APP_URL = os.environ.get("APP_URL", "https://gptcoaching-mi-training.pages.dev").strip().rstrip("/")
+# World-model rerank: number of candidate replies the DPO Qwen proposes per turn
+# before the planner picks the one that best evokes change talk. 1 disables it.
+RERANK_K = int(os.environ.get("RERANK_K", "4"))
 
 assert MODEL_PATH, "MODEL_PATH is empty. export MODEL_PATH=/abs/path/to/model or HF repo id"
 assert RESEND_API_KEY, "RESEND_API_KEY is empty. export RESEND_API_KEY=re_xxx for magic-link email"
@@ -182,6 +185,7 @@ class ChatRequest(BaseModel):
     user_id: str = "anon"
     history: List[Turn] = []   # optional client-provided history (seed only)
     user_msg: str
+    rerank: bool = True        # world-model generate-K-then-rerank (System-2 planner)
 
 class ResetReq(BaseModel):
     user_id: str
@@ -558,6 +562,16 @@ def chat_endpoint(req: ChatRequest, current_user: dict = Depends(get_current_use
             pass
         stop_ids = [i for i in [eos_id, im_end_id] if i is not None]
 
+        # System 1 proposes K candidates; System 2 (world model) reranks them.
+        n_seq = RERANK_K if (req.rerank and RERANK_K > 1) else 1
+
+        def _decode(seq_ids):
+            r = tok.decode(seq_ids, skip_special_tokens=True).strip()
+            if not r:  # rare fallback clean
+                raw = tok.decode(seq_ids, skip_special_tokens=False)
+                r = re.sub(r"<\|im_(start|end)\|>|\s+", " ", raw).strip()
+            return r
+
         with torch.no_grad():
             out = model.generate(
                 **inputs,
@@ -565,15 +579,44 @@ def chat_endpoint(req: ChatRequest, current_user: dict = Depends(get_current_use
                 do_sample=True,
                 temperature=0.7,
                 top_p=0.9,
+                num_return_sequences=n_seq,
                 pad_token_id=eos_id,
                 eos_token_id=stop_ids[0] if stop_ids else eos_id,
             )
 
-        gen_ids = out[0][inputs["input_ids"].shape[-1]:]
-        reply = tok.decode(gen_ids, skip_special_tokens=True).strip()
-        if not reply:  # rare fallback clean
-            raw = tok.decode(gen_ids, skip_special_tokens=False)
-            reply = re.sub(r"<\|im_(start|end)\|>|\s+", " ", raw).strip()
+        plen = inputs["input_ids"].shape[-1]
+        candidates = [_decode(out[i][plen:]) for i in range(out.shape[0])]
+        candidates = [c for c in candidates if c] or ["(no content)"]
+
+        # 4b) World-model rerank: pick the candidate whose MI action the planner
+        #     predicts best evokes change talk for this client's estimated state.
+        rerank_info = None
+        reply = candidates[0]
+        if n_seq > 1 and len(candidates) > 1:
+            try:
+                from scripts.world_model.counterfactual import rerank_replies
+                ctx = recent_hist[-1].coach if recent_hist else ""
+                rr = rerank_replies(req.user_msg, candidates, context=ctx)
+                reply = rr["chosen_reply"] or reply
+                chosen = rr["scored"][rr["chosen_index"]]
+                rerank_info = {
+                    "enabled": True,
+                    "n_candidates": len(candidates),
+                    "client_state": rr["client_state"],
+                    "chosen_action": chosen["action"],
+                    "chosen_Q": chosen["Q"],
+                    "best_action": rr["best_action"],
+                    "candidates": [
+                        {"action": s["action"], "Q": s["Q"],
+                         "P_change": s["P_change"], "chosen": s["index"] == rr["chosen_index"]}
+                        for s in rr["scored"]
+                    ],
+                }
+                print(f"[rerank] state={rr['client_state']} "
+                      f"picked '{chosen['action']}' (Q={chosen['Q']}) "
+                      f"from {len(candidates)} candidates")
+            except Exception as e:
+                print(f"[rerank] failed, using first candidate: {e}")
 
         # 5) Update server memory
         mem.append({"user": req.user_msg, "coach": reply})
@@ -588,6 +631,7 @@ def chat_endpoint(req: ChatRequest, current_user: dict = Depends(get_current_use
             "coach": reply,
             "history_len": len(mem),
             "journey_stage": kerrio_profile.stage.value,  # Track journey stage
+            "rerank": rerank_info,
         }
         append_jsonl(req.user_id, record)
 
@@ -601,6 +645,7 @@ def chat_endpoint(req: ChatRequest, current_user: dict = Depends(get_current_use
             "reply": reply or "(no content)",
             "journey_stage": kerrio_profile.stage.value,
             "can_advance": kerrio_profile.can_advance_stage(),
+            "rerank": rerank_info,
         }
 
     except Exception as e:

@@ -1397,11 +1397,37 @@
     }
 
     // ---------------- Chat logic ----------------
-    function appendMsg(role, text) {
+    const ACTION_LABEL = {
+      open_question: "open question", closed_question: "closed question",
+      simple_reflection: "simple reflection", complex_reflection: "complex reflection",
+      information: "information", advice: "advice", negotiation: "negotiation",
+      options: "options", other: "other",
+    };
+
+    function appendMsg(role, text, rerank) {
       const div = document.createElement("div");
       div.className = role === "user" ? "msg-user" : "msg-coach";
       div.textContent = text; // Content is just text, CSS adds prefix via pseudo-element for coach
       chatLog.appendChild(div);
+
+      // World-model rerank badge: show that System 2 picked this reply.
+      if (role === "coach" && rerank && rerank.enabled) {
+        const badge = document.createElement("div");
+        badge.style.cssText =
+          "font-size:0.72rem; color:#166534; background:#f0fdf4; border:1px solid #bbf7d0;" +
+          "border-radius:6px; padding:4px 8px; margin:2px 0 10px; max-width:75%;";
+        const picked = ACTION_LABEL[rerank.chosen_action] || rerank.chosen_action;
+        const best = ACTION_LABEL[rerank.best_action] || rerank.best_action;
+        const onTarget = rerank.chosen_action === rerank.best_action;
+        badge.innerHTML =
+          `🧠 <b>World model</b> compared ${rerank.n_candidates} candidate replies · ` +
+          `client state: <b>${rerank.client_state}</b> · ` +
+          `chose <b>${picked}</b>` +
+          (onTarget
+            ? ` (the model-optimal action ✓)`
+            : ` · model-optimal here is <b>${best}</b>`);
+        chatLog.appendChild(badge);
+      }
       chatLog.scrollTop = chatLog.scrollHeight;
     }
 
@@ -1422,7 +1448,7 @@
         });
 
         const data = await res.json();
-        appendMsg("coach", data.reply || "");
+        appendMsg("coach", data.reply || "", data.rerank);
         // Remember the latest turn so the World Model panel can auto-evaluate it.
         lastClientMsg = msg;
         lastCoachReply = data.reply || "";

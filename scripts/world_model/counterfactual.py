@@ -167,6 +167,50 @@ def _model():
     return _MODEL_CACHE["model"]
 
 
+def rerank_replies(client_msg: str, candidates, horizon=3, gamma=0.9, context=""):
+    """World-model rerank of K candidate coach replies (System-2 planner step).
+
+    Generate-K-then-evaluate: the DPO Qwen (System 1) proposes `candidates`;
+    here we score each by the MI action it expresses and the world model's
+    H-step Q-value for (estimated client state, that action), then return the
+    candidate whose action the model predicts best evokes change talk.
+
+    Honest scope: the tabular world model discriminates at the MI-action-TYPE
+    granularity, not individual phrasing, so this picks the best action TYPE
+    among the candidates and returns a candidate expressing it. Ties on Q keep
+    generation order (i.e. the model's own first choice).
+
+    Returns {chosen_index, chosen_reply, client_state, scored:[...]}.
+    """
+    state = estimate_state(client_msg, context)
+    ranked = P.rank_actions(_model(), state, horizon, gamma)
+    q_by_action = {r["action"]: r for r in ranked}
+    worst = ranked[-1]
+
+    scored = []
+    for i, reply in enumerate(candidates):
+        action = tag_action(reply)
+        row = q_by_action.get(action, worst)
+        scored.append({
+            "index": i,
+            "reply": reply,
+            "action": action,
+            "Q": row["Q"],
+            "P_change": row["P_change"],
+            "P_sustain": row["P_sustain"],
+        })
+    # Highest Q wins; stable so ties keep the model's original ordering.
+    order = sorted(range(len(scored)), key=lambda i: -scored[i]["Q"])
+    chosen = order[0] if order else 0
+    return {
+        "client_state": state,
+        "chosen_index": chosen,
+        "chosen_reply": candidates[chosen] if candidates else "",
+        "scored": scored,
+        "best_action": ranked[0]["action"] if ranked else None,
+    }
+
+
 def coach_feedback(client_msg: str, coach_reply: str, horizon=3, gamma=0.9, context=""):
     """Full counterfactual feedback for one (client_msg, coach_reply) pair."""
     from scripts.world_model.safety import safety_screen
