@@ -549,17 +549,21 @@ def chat_endpoint(req: ChatRequest, current_user: dict = Depends(get_current_use
             for t in req.history:
                 mem.append({"user": t.user, "coach": t.coach})
 
-        # 2) Optional: build a cognitive map summary (Graph-of-Thoughts memory)
+        # 2) Optional: build a cognitive map summary (Graph-of-Thoughts memory).
+        # This is an EXTRA full generation per turn — disabled by default because
+        # combined with rerank it pushes total latency past the tunnel's ~100s
+        # timeout on later turns. The cognitive-map panel has its own /cogmap and
+        # /map endpoints, so the map is still available on demand.
         map_summary: Optional[str] = None
-        try:
-            # Only start building maps after a few turns to avoid overkill
-            if len(mem) >= 3:
-                turns_for_map = load_dialog_for_user(req.user_id, max_turns=12)
-                if turns_for_map:
-                    cmap = generate_cogmap_from_turns(turns_for_map, max_new_tokens=400)
-                    map_summary = summarize_cogmap_for_prompt(cmap)
-        except Exception as e:
-            print(f"[warn] cogmap summary failed: {e}")
+        if COGMAP_IN_CHAT:
+            try:
+                if len(mem) >= 3:
+                    turns_for_map = load_dialog_for_user(req.user_id, max_turns=12)
+                    if turns_for_map:
+                        cmap = generate_cogmap_from_turns(turns_for_map, max_new_tokens=400)
+                        map_summary = summarize_cogmap_for_prompt(cmap)
+            except Exception as e:
+                print(f"[warn] cogmap summary failed: {e}")
 
         # 3) Prompt with last N turns + optional map summary + Kerrio profile
         recent_hist = [Turn(user=h["user"], coach=h["coach"]) for h in mem][-6:]
