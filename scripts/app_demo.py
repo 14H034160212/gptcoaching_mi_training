@@ -90,6 +90,9 @@ APP_URL = os.environ.get("APP_URL", "https://gptcoaching-mi-training.pages.dev")
 # World-model rerank: number of candidate replies the DPO Qwen proposes per turn
 # before the planner picks the one that best evokes change talk. 1 disables it.
 RERANK_K = int(os.environ.get("RERANK_K", "4"))
+# Inline per-turn cognitive-map generation in /chat — off by default (it adds a
+# full extra generation per turn and can push latency past the tunnel timeout).
+COGMAP_IN_CHAT = os.environ.get("COGMAP_IN_CHAT", "0").lower() not in ("0", "false", "no", "off")
 
 assert MODEL_PATH, "MODEL_PATH is empty. export MODEL_PATH=/abs/path/to/model or HF repo id"
 assert RESEND_API_KEY, "RESEND_API_KEY is empty. export RESEND_API_KEY=re_xxx for magic-link email"
