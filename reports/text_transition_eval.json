@@ -1,0 +1,22 @@
+{
+  "head": "logreg",
+  "use_prev_talk": true,
+  "feat_dim": 2307,
+  "val_acc": 0.5915,
+  "val_macro_f1": 0.5327,
+  "per_class": {
+    "change": {
+      "recall": 0.623,
+      "f1": 0.55
+    },
+    "sustain": {
+      "recall": 0.438,
+      "f1": 0.37
+    },
+    "neutral": {
+      "recall": 0.611,
+      "f1": 0.678
+    }
+  },
+  "tabular_gold_baseline_macro_f1": 0.5606
+}
