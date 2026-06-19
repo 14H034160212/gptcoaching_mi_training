@@ -1,0 +1,432 @@
+{
+  "summary": {
+    "n": 60,
+    "k": 4,
+    "rerank_changed_action_pct": 38.3,
+    "mean_emp_change_first": 0.364,
+    "mean_emp_change_rerank": 0.367,
+    "rerank_uplift": 0.003
+  },
+  "per_turn": [
+    {
+      "state": "neutral",
+      "first": "open_question",
+      "rerank": "open_question",
+      "emp_first": 0.3050847457627119,
+      "emp_rerank": 0.3050847457627119
+    },
+    {
+      "state": "neutral",
+      "first": "open_question",
+      "rerank": "open_question",
+      "emp_first": 0.3050847457627119,
+      "emp_rerank": 0.3050847457627119
+    },
+    {
+      "state": "change",
+      "first": "open_question",
+      "rerank": "open_question",
+      "emp_first": 0.7037037037037037,
+      "emp_rerank": 0.7037037037037037
+    },
+    {
+      "state": "change",
+      "first": "open_question",
+      "rerank": "open_question",
+      "emp_first": 0.7037037037037037,
+      "emp_rerank": 0.7037037037037037
+    },
+    {
+      "state": "change",
+      "first": "closed_question",
+      "rerank": "open_question",
+      "emp_first": 0.5,
+      "emp_rerank": 0.7037037037037037
+    },
+    {
+      "state": "sustain",
+      "first": "complex_reflection",
+      "rerank": "complex_reflection",
+      "emp_first": 0.0,
+      "emp_rerank": 0.0
+    },
+    {
+      "state": "sustain",
+      "first": "open_question",
+      "rerank": "closed_question",
+      "emp_first": null,
+      "emp_rerank": null
+    },
+    {
+      "state": "sustain",
+      "first": "other",
+      "rerank": "closed_question",
+      "emp_first": 0.0,
+      "emp_rerank": null
+    },
+    {
+      "state": "change",
+      "first": "open_question",
+      "rerank": "open_question",
+      "emp_first": 0.7037037037037037,
+      "emp_rerank": 0.7037037037037037
+    },
+    {
+      "state": "change",
+      "first": "open_question",
+      "rerank": "open_question",
+      "emp_first": 0.7037037037037037,
+      "emp_rerank": 0.7037037037037037
+    },
+    {
+      "state": "neutral",
+      "first": "open_question",
+      "rerank": "open_question",
+      "emp_first": 0.3050847457627119,
+      "emp_rerank": 0.3050847457627119
+    },
+    {
+      "state": "change",
+      "first": "open_question",
+      "rerank": "open_question",
+      "emp_first": 0.7037037037037037,
+      "emp_rerank": 0.7037037037037037
+    },
+    {
+      "state": "change",
+      "first": "open_question",
+      "rerank": "open_question",
+      "emp_first": 0.7037037037037037,
+      "emp_rerank": 0.7037037037037037
+    },
+    {
+      "state": "neutral",
+      "first": "negotiation",
+      "rerank": "negotiation",
+      "emp_first": null,
+      "emp_rerank": null
+    },
+    {
+      "state": "neutral",
+      "first": "negotiation",
+      "rerank": "negotiation",
+      "emp_first": null,
+      "emp_rerank": null
+    },
+    {
+      "state": "neutral",
+      "first": "closed_question",
+      "rerank": "simple_reflection",
+      "emp_first": 0.16666666666666666,
+      "emp_rerank": 0.10869565217391304
+    },
+    {
+      "state": "change",
+      "first": "complex_reflection",
+      "rerank": "open_question",
+      "emp_first": 0.4444444444444444,
+      "emp_rerank": 0.7037037037037037
+    },
+    {
+      "state": "change",
+      "first": "open_question",
+      "rerank": "open_question",
+      "emp_first": 0.7037037037037037,
+      "emp_rerank": 0.7037037037037037
+    },
+    {
+      "state": "change",
+      "first": "complex_reflection",
+      "rerank": "open_question",
+      "emp_first": 0.4444444444444444,
+      "emp_rerank": 0.7037037037037037
+    },
+    {
+      "state": "neutral",
+      "first": "complex_reflection",
+      "rerank": "closed_question",
+      "emp_first": 0.18032786885245902,
+      "emp_rerank": 0.16666666666666666
+    },
+    {
+      "state": "neutral",
+      "first": "complex_reflection",
+      "rerank": "open_question",
+      "emp_first": 0.18032786885245902,
+      "emp_rerank": 0.3050847457627119
+    },
+    {
+      "state": "change",
+      "first": "closed_question",
+      "rerank": "simple_reflection",
+      "emp_first": 0.5,
+      "emp_rerank": 0.5
+    },
+    {
+      "state": "change",
+      "first": "open_question",
+      "rerank": "open_question",
+      "emp_first": 0.7037037037037037,
+      "emp_rerank": 0.7037037037037037
+    },
+    {
+      "state": "neutral",
+      "first": "open_question",
+      "rerank": "negotiation",
+      "emp_first": 0.3050847457627119,
+      "emp_rerank": null
+    },
+    {
+      "state": "neutral",
+      "first": "open_question",
+      "rerank": "open_question",
+      "emp_first": 0.3050847457627119,
+      "emp_rerank": 0.3050847457627119
+    },
+    {
+      "state": "neutral",
+      "first": "open_question",
+      "rerank": "negotiation",
+      "emp_first": 0.3050847457627119,
+      "emp_rerank": null
+    },
+    {
+      "state": "neutral",
+      "first": "open_question",
+      "rerank": "closed_question",
+      "emp_first": 0.3050847457627119,
+      "emp_rerank": 0.16666666666666666
+    },
+    {
+      "state": "neutral",
+      "first": "open_question",
+      "rerank": "open_question",
+      "emp_first": 0.3050847457627119,
+      "emp_rerank": 0.3050847457627119
+    },
+    {
+      "state": "neutral",
+      "first": "open_question",
+      "rerank": "open_question",
+      "emp_first": 0.3050847457627119,
+      "emp_rerank": 0.3050847457627119
+    },
+    {
+      "state": "neutral",
+      "first": "closed_question",
+      "rerank": "closed_question",
+      "emp_first": 0.16666666666666666,
+      "emp_rerank": 0.16666666666666666
+    },
+    {
+      "state": "neutral",
+      "first": "closed_question",
+      "rerank": "closed_question",
+      "emp_first": 0.16666666666666666,
+      "emp_rerank": 0.16666666666666666
+    },
+    {
+      "state": "neutral",
+      "first": "open_question",
+      "rerank": "simple_reflection",
+      "emp_first": 0.3050847457627119,
+      "emp_rerank": 0.10869565217391304
+    },
+    {
+      "state": "neutral",
+      "first": "open_question",
+      "rerank": "open_question",
+      "emp_first": 0.3050847457627119,
+      "emp_rerank": 0.3050847457627119
+    },
+    {
+      "state": "neutral",
+      "first": "open_question",
+      "rerank": "open_question",
+      "emp_first": 0.3050847457627119,
+      "emp_rerank": 0.3050847457627119
+    },
+    {
+      "state": "neutral",
+      "first": "open_question",
+      "rerank": "open_question",
+      "emp_first": 0.3050847457627119,
+      "emp_rerank": 0.3050847457627119
+    },
+    {
+      "state": "neutral",
+      "first": "closed_question",
+      "rerank": "closed_question",
+      "emp_first": 0.16666666666666666,
+      "emp_rerank": 0.16666666666666666
+    },
+    {
+      "state": "neutral",
+      "first": "open_question",
+      "rerank": "closed_question",
+      "emp_first": 0.3050847457627119,
+      "emp_rerank": 0.16666666666666666
+    },
+    {
+      "state": "sustain",
+      "first": "complex_reflection",
+      "rerank": "complex_reflection",
+      "emp_first": 0.0,
+      "emp_rerank": 0.0
+    },
+    {
+      "state": "neutral",
+      "first": "closed_question",
+      "rerank": "closed_question",
+      "emp_first": 0.16666666666666666,
+      "emp_rerank": 0.16666666666666666
+    },
+    {
+      "state": "neutral",
+      "first": "open_question",
+      "rerank": "open_question",
+      "emp_first": 0.3050847457627119,
+      "emp_rerank": 0.3050847457627119
+    },
+    {
+      "state": "sustain",
+      "first": "open_question",
+      "rerank": "open_question",
+      "emp_first": null,
+      "emp_rerank": null
+    },
+    {
+      "state": "change",
+      "first": "open_question",
+      "rerank": "open_question",
+      "emp_first": 0.7037037037037037,
+      "emp_rerank": 0.7037037037037037
+    },
+    {
+      "state": "neutral",
+      "first": "open_question",
+      "rerank": "negotiation",
+      "emp_first": 0.3050847457627119,
+      "emp_rerank": null
+    },
+    {
+      "state": "neutral",
+      "first": "closed_question",
+      "rerank": "simple_reflection",
+      "emp_first": 0.16666666666666666,
+      "emp_rerank": 0.10869565217391304
+    },
+    {
+      "state": "change",
+      "first": "closed_question",
+      "rerank": "open_question",
+      "emp_first": 0.5,
+      "emp_rerank": 0.7037037037037037
+    },
+    {
+      "state": "neutral",
+      "first": "open_question",
+      "rerank": "closed_question",
+      "emp_first": 0.3050847457627119,
+      "emp_rerank": 0.16666666666666666
+    },
+    {
+      "state": "change",
+      "first": "open_question",
+      "rerank": "open_question",
+      "emp_first": 0.7037037037037037,
+      "emp_rerank": 0.7037037037037037
+    },
+    {
+      "state": "neutral",
+      "first": "complex_reflection",
+      "rerank": "open_question",
+      "emp_first": 0.18032786885245902,
+      "emp_rerank": 0.3050847457627119
+    },
+    {
+      "state": "neutral",
+      "first": "open_question",
+      "rerank": "closed_question",
+      "emp_first": 0.3050847457627119,
+      "emp_rerank": 0.16666666666666666
+    },
+    {
+      "state": "change",
+      "first": "open_question",
+      "rerank": "open_question",
+      "emp_first": 0.7037037037037037,
+      "emp_rerank": 0.7037037037037037
+    },
+    {
+      "state": "sustain",
+      "first": "open_question",
+      "rerank": "complex_reflection",
+      "emp_first": null,
+      "emp_rerank": 0.0
+    },
+    {
+      "state": "change",
+      "first": "open_question",
+      "rerank": "open_question",
+      "emp_first": 0.7037037037037037,
+      "emp_rerank": 0.7037037037037037
+    },
+    {
+      "state": "neutral",
+      "first": "closed_question",
+      "rerank": "closed_question",
+      "emp_first": 0.16666666666666666,
+      "emp_rerank": 0.16666666666666666
+    },
+    {
+      "state": "neutral",
+      "first": "complex_reflection",
+      "rerank": "complex_reflection",
+      "emp_first": 0.18032786885245902,
+      "emp_rerank": 0.18032786885245902
+    },
+    {
+      "state": "neutral",
+      "first": "open_question",
+      "rerank": "open_question",
+      "emp_first": 0.3050847457627119,
+      "emp_rerank": 0.3050847457627119
+    },
+    {
+      "state": "neutral",
+      "first": "open_question",
+      "rerank": "open_question",
+      "emp_first": 0.3050847457627119,
+      "emp_rerank": 0.3050847457627119
+    },
+    {
+      "state": "neutral",
+      "first": "open_question",
+      "rerank": "simple_reflection",
+      "emp_first": 0.3050847457627119,
+      "emp_rerank": 0.10869565217391304
+    },
+    {
+      "state": "neutral",
+      "first": "open_question",
+      "rerank": "open_question",
+      "emp_first": 0.3050847457627119,
+      "emp_rerank": 0.3050847457627119
+    },
+    {
+      "state": "neutral",
+      "first": "open_question",
+      "rerank": "closed_question",
+      "emp_first": 0.3050847457627119,
+      "emp_rerank": 0.16666666666666666
+    },
+    {
+      "state": "neutral",
+      "first": "open_question",
+      "rerank": "open_question",
+      "emp_first": 0.3050847457627119,
+      "emp_rerank": 0.3050847457627119
+    }
+  ]
+}

@@ -77,10 +77,10 @@
       "neutral": "negotiation",
       "sustain": "negotiation"
     },
-    "brier_score (lower better)": 0.4694,
-    "clinical_validity_change_gap (evoking - directive, >0 good)": 0.093,
-    "mean_Pchange_evoking": 0.297,
-    "mean_Pchange_directive": 0.204
+    "brier_score (lower better)": 0.4831,
+    "clinical_validity_change_gap (evoking - directive, >0 good)": 0.099,
+    "mean_Pchange_evoking": 0.283,
+    "mean_Pchange_directive": 0.184
   },
   "safety": {
     "crisis_recall": "5/5",
